@@ -2,6 +2,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../models/vehicle.dart';
+import '../../models/fuel_entry.dart';
 
 class AppDatabase {
   AppDatabase._();
@@ -9,7 +10,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _databaseName = 'motorlog.db';
-  static const _databaseVersion = 2;
+  static const _databaseVersion = 3;
 
   Database? _database;
 
@@ -36,6 +37,7 @@ class AppDatabase {
 
   Future<void> _createDatabase(Database db, int version) async {
     await db.execute('''
+
       CREATE TABLE vehicles (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -49,7 +51,27 @@ class AppDatabase {
         is_default INTEGER NOT NULL DEFAULT 0
       )
     ''');
+    await _createFuelEntriesTable(db);
   }
+
+  Future<void> _createFuelEntriesTable(Database db) async {
+  await db.execute('''
+    CREATE TABLE fuel_entries (
+      id TEXT PRIMARY KEY,
+      vehicle_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      mileage INTEGER NOT NULL,
+      liters REAL NOT NULL,
+      price_per_liter REAL NOT NULL,
+      total_price REAL NOT NULL,
+      is_full_tank INTEGER NOT NULL DEFAULT 1,
+      station TEXT,
+      notes TEXT,
+      FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+        ON DELETE CASCADE
+    )
+  ''');
+}
 
   Future<void> _upgradeDatabase(
     Database db,
@@ -66,6 +88,10 @@ class AppDatabase {
         'ALTER TABLE vehicles '
         'ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0',
       );
+    }
+
+    if (oldVersion < 3) {
+      await _createFuelEntriesTable(db);
     }
   }
 
@@ -128,4 +154,49 @@ class AppDatabase {
       );
     });
   }
+  Future<List<FuelEntry>> getFuelEntries({
+  String? vehicleId,
+}) async {
+  final db = await database;
+
+  final maps = await db.query(
+    'fuel_entries',
+    where: vehicleId == null ? null : 'vehicle_id = ?',
+    whereArgs: vehicleId == null ? null : [vehicleId],
+    orderBy: 'date DESC, mileage DESC',
+  );
+
+  return maps.map(FuelEntry.fromMap).toList();
+}
+
+Future<void> insertFuelEntry(FuelEntry entry) async {
+  final db = await database;
+
+  await db.insert(
+    'fuel_entries',
+    entry.toMap(),
+    conflictAlgorithm: ConflictAlgorithm.replace,
+  );
+}
+
+Future<void> updateFuelEntry(FuelEntry entry) async {
+  final db = await database;
+
+  await db.update(
+    'fuel_entries',
+    entry.toMap(),
+    where: 'id = ?',
+    whereArgs: [entry.id],
+  );
+}
+
+Future<void> deleteFuelEntry(String id) async {
+  final db = await database;
+
+  await db.delete(
+    'fuel_entries',
+    where: 'id = ?',
+    whereArgs: [id],
+  );
+}
 }
