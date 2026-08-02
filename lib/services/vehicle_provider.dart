@@ -43,6 +43,15 @@ class VehicleNotifier extends AsyncNotifier<List<Vehicle>> {
     });
   }
 
+Future<void> setDefaultVehicle(String vehicleId) async {
+  state = const AsyncLoading<List<Vehicle>>();
+
+  state = await AsyncValue.guard(() async {
+    await _database.setDefaultVehicle(vehicleId);
+    return _database.getVehicles();
+  });
+}
+
   Future<void> reload() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(_database.getVehicles);

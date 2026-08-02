@@ -179,7 +179,8 @@ class VehiclesPage extends ConsumerWidget {
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
                         '${vehicle.brand} ${vehicle.model}\n'
-                        '${vehicle.year} · ${vehicle.fuelType} · '
+                        '${vehicle.vehicleType} · ${vehicle.year} · '
+                        '${vehicle.fuelType} · '
                         '${vehicle.mileage} km'
                         '${vehicle.licensePlate == null ? '' : '\n${vehicle.licensePlate}'}',
                       ),

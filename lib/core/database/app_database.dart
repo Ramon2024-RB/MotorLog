@@ -9,7 +9,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _databaseName = 'motorlog.db';
-  static const _databaseVersion = 1;
+  static const _databaseVersion = 2;
 
   Database? _database;
 
@@ -30,6 +30,7 @@ class AppDatabase {
       path,
       version: _databaseVersion,
       onCreate: _createDatabase,
+      onUpgrade: _upgradeDatabase,
     );
   }
 
@@ -43,9 +44,29 @@ class AppDatabase {
         year INTEGER NOT NULL,
         fuel_type TEXT NOT NULL,
         mileage INTEGER NOT NULL,
-        license_plate TEXT
+        vehicle_type TEXT NOT NULL DEFAULT 'Auto',
+        license_plate TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0
       )
     ''');
+  }
+
+  Future<void> _upgradeDatabase(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        "ALTER TABLE vehicles "
+        "ADD COLUMN vehicle_type TEXT NOT NULL DEFAULT 'Auto'",
+      );
+
+      await db.execute(
+        'ALTER TABLE vehicles '
+        'ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0',
+      );
+    }
   }
 
   Future<List<Vehicle>> getVehicles() async {
@@ -88,5 +109,23 @@ class AppDatabase {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<void> setDefaultVehicle(String vehicleId) async {
+    final db = await database;
+
+    await db.transaction((transaction) async {
+      await transaction.update(
+        'vehicles',
+        {'is_default': 0},
+      );
+
+      await transaction.update(
+        'vehicles',
+        {'is_default': 1},
+        where: 'id = ?',
+        whereArgs: [vehicleId],
+      );
+    });
   }
 }

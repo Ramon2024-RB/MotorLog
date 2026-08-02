@@ -28,6 +28,7 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
   late final TextEditingController _licensePlateController;
 
   late String _fuelType;
+  late String _vehicleType;
   bool _isSaving = false;
 
   bool get _isEditing => widget.vehicle != null;
@@ -58,6 +59,7 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
     );
 
     _fuelType = vehicle?.fuelType ?? 'Diesel';
+    _vehicleType = vehicle?.vehicleType ?? 'Auto';
   }
 
   @override
@@ -102,6 +104,7 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
       model: _modelController.text.trim(),
       year: year,
       fuelType: _fuelType,
+      vehicleType: _vehicleType,
       mileage: mileage,
       licensePlate: _licensePlateController.text.trim().isEmpty
           ? null
@@ -242,6 +245,44 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
                 ),
               ),
               const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+  initialValue: _vehicleType,
+  decoration: const InputDecoration(
+    labelText: 'Fahrzeugtyp',
+    prefixIcon: Icon(Icons.category_outlined),
+    border: OutlineInputBorder(),
+  ),
+  items: const [
+    DropdownMenuItem(
+      value: 'Auto',
+      child: Text('Auto'),
+    ),
+    DropdownMenuItem(
+      value: 'Camper',
+      child: Text('Camper'),
+    ),
+    DropdownMenuItem(
+      value: 'Motorrad',
+      child: Text('Motorrad'),
+    ),
+    DropdownMenuItem(
+      value: 'Transporter',
+      child: Text('Transporter'),
+    ),
+    DropdownMenuItem(
+      value: 'Sonstiges',
+      child: Text('Sonstiges'),
+    ),
+  ],
+  onChanged: (value) {
+    if (value != null) {
+      setState(() {
+        _vehicleType = value;
+      });
+    }
+  },
+),
+const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _fuelType,
                 decoration: const InputDecoration(
