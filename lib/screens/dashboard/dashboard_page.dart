@@ -59,36 +59,9 @@ class DashboardPage extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: 0,
-        onDestinationSelected: (index) {},
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Übersicht',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.local_gas_station_outlined),
-            selectedIcon: Icon(Icons.local_gas_station),
-            label: 'Tanken',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Kosten',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.directions_car_outlined),
-            selectedIcon: Icon(Icons.directions_car),
-            label: 'Fahrzeuge',
-          ),
-        ],
-      ),
     );
   }
 }
-
 class QuickActions extends StatelessWidget {
   const QuickActions({super.key});
 

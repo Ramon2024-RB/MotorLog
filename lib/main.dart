@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'screens/dashboard/dashboard_page.dart';
+import 'core/router/app_router.dart';
 
 void main() {
-  runApp(const MotorLogApp());
+  runApp(
+    const ProviderScope(
+      child: MotorLogApp(),
+    ),
+  );
 }
 
 class MotorLogApp extends StatelessWidget {
@@ -11,17 +16,16 @@ class MotorLogApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'MotorLog',
+      routerConfig: appRouter,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF176B5B),
-          brightness: Brightness.light,
         ),
         useMaterial3: true,
       ),
-      home: const DashboardPage(),
     );
   }
 }
