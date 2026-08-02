@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/vehicle.dart';
 import '../../services/vehicle_provider.dart';
+import '../../models/fuel_entry.dart';
+import '../../services/fuel_entry_provider.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -75,9 +77,95 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     }
   }
 
+  _DashboardStats _calculateDashboardStats(
+    List<FuelEntry> entries,
+  ) {
+    if (entries.isEmpty) {
+      return const _DashboardStats();
+    }
+
+    final now = DateTime.now();
+
+    final monthlyEntries = entries.where((entry) {
+      return entry.date.year == now.year &&
+          entry.date.month == now.month;
+    }).toList();
+
+    final monthlyFuelCosts = monthlyEntries.fold<double>(
+      0,
+      (sum, entry) => sum + entry.totalPrice,
+    );
+
+    var monthlyDistance = 0;
+
+    if (monthlyEntries.length >= 2) {
+      final mileages = monthlyEntries
+          .map((entry) => entry.mileage)
+          .toList()
+        ..sort();
+
+      monthlyDistance = mileages.last - mileages.first;
+    }
+
+    return _DashboardStats(
+      averageConsumption: _calculateAverageConsumption(entries),
+      monthlyFuelCosts: monthlyFuelCosts,
+      monthlyDistance: monthlyDistance,
+      monthlyFuelEntryCount: monthlyEntries.length,
+    );
+  }
+
+  double? _calculateAverageConsumption(
+    List<FuelEntry> entries,
+  ) {
+    final fullTankEntries = entries
+        .where((entry) => entry.isFullTank)
+        .toList()
+      ..sort(
+        (a, b) => a.mileage.compareTo(b.mileage),
+      );
+
+    if (fullTankEntries.length < 2) {
+      return null;
+    }
+
+    var totalDistance = 0;
+    var totalLiters = 0.0;
+
+    for (var i = 1; i < fullTankEntries.length; i++) {
+      final previous = fullTankEntries[i - 1];
+      final current = fullTankEntries[i];
+
+      final distance = current.mileage - previous.mileage;
+
+      if (distance <= 0) {
+        continue;
+      }
+
+      totalDistance += distance;
+      totalLiters += current.liters;
+    }
+
+    if (totalDistance == 0) {
+      return null;
+    }
+
+    return totalLiters / totalDistance * 100;
+  }
+
+  String _formatDecimal(
+    double value,
+    int decimalPlaces,
+  ) {
+    return value
+        .toStringAsFixed(decimalPlaces)
+        .replaceAll('.', ',');
+  }
+
   @override
   Widget build(BuildContext context) {
     final vehiclesAsync = ref.watch(vehicleProvider);
+    final fuelEntriesAsync = ref.watch(fuelEntryProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -149,6 +237,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
           final selectedVehicle =
               sortedVehicles[_selectedVehicleIndex];
+              final allFuelEntries = fuelEntriesAsync.asData?.value ?? <FuelEntry>[];
+
+final selectedVehicleEntries = allFuelEntries
+    .where(
+      (entry) => entry.vehicleId == selectedVehicle.id,
+    )
+    .toList()
+  ..sort(
+    (first, second) => first.date.compareTo(second.date),
+  );
+
+final dashboardStats = _calculateDashboardStats(
+  selectedVehicleEntries,
+);
 
           return RefreshIndicator(
             onRefresh: () {
@@ -302,32 +404,40 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
                     childAspectRatio: 1.25,
-                    children: const [
-                      _DashboardStatCard(
-                        icon: Icons.speed,
-                        value: '–',
-                        unit: 'l/100 km',
-                        label: 'Ø Verbrauch',
-                      ),
-                      _DashboardStatCard(
-                        icon: Icons.euro,
-                        value: '0,00',
-                        unit: '€',
-                        label: 'Kosten im Monat',
-                      ),
-                      _DashboardStatCard(
-                        icon: Icons.route,
-                        value: '0',
-                        unit: 'km',
-                        label: 'Diesen Monat',
-                      ),
-                      _DashboardStatCard(
-                        icon: Icons.local_gas_station_outlined,
-                        value: '0',
-                        unit: '',
-                        label: 'Tankvorgänge',
-                      ),
-                    ],
+                    children: [
+  _DashboardStatCard(
+    icon: Icons.speed,
+    value: dashboardStats.averageConsumption == null
+        ? '–'
+        : _formatDecimal(
+            dashboardStats.averageConsumption!,
+            1,
+          ),
+    unit: 'l/100 km',
+    label: 'Ø Verbrauch',
+  ),
+  _DashboardStatCard(
+    icon: Icons.euro,
+    value: _formatDecimal(
+      dashboardStats.monthlyFuelCosts,
+      2,
+    ),
+    unit: '€',
+    label: 'Tankkosten im Monat',
+  ),
+  _DashboardStatCard(
+    icon: Icons.route,
+    value: dashboardStats.monthlyDistance.toString(),
+    unit: 'km',
+    label: 'Diesen Monat',
+  ),
+  _DashboardStatCard(
+    icon: Icons.local_gas_station_outlined,
+              value: dashboardStats.monthlyFuelEntryCount.toString(),
+               unit: '',
+                label: 'Tankvorgänge',
+                ),
+                ],
                   ),
                 ),
 
@@ -359,6 +469,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ),
     );
   }
+}
+
+class _DashboardStats {
+  const _DashboardStats({
+    this.averageConsumption,
+    this.monthlyFuelCosts = 0,
+    this.monthlyDistance = 0,
+    this.monthlyFuelEntryCount = 0,
+  });
+
+  final double? averageConsumption;
+  final double monthlyFuelCosts;
+  final int monthlyDistance;
+  final int monthlyFuelEntryCount;
 }
 
 class _VehicleCarouselCard extends StatelessWidget {
