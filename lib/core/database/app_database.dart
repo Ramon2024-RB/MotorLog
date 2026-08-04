@@ -1,9 +1,10 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-import '../../models/vehicle.dart';
-import '../../models/fuel_entry.dart';
 import '../../models/expense.dart';
+import '../../models/fuel_entry.dart';
+import '../../models/maintenance_entry.dart';
+import '../../models/vehicle.dart';
 
 class AppDatabase {
   AppDatabase._();
@@ -11,7 +12,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _databaseName = 'motorlog.db';
-  static const _databaseVersion = 4;
+  static const _databaseVersion = 5;
 
   Database? _database;
 
@@ -33,12 +34,14 @@ class AppDatabase {
       version: _databaseVersion,
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
     );
   }
 
   Future<void> _createDatabase(Database db, int version) async {
     await db.execute('''
-
       CREATE TABLE vehicles (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -52,44 +55,63 @@ class AppDatabase {
         is_default INTEGER NOT NULL DEFAULT 0
       )
     ''');
+
     await _createFuelEntriesTable(db);
     await _createExpensesTable(db);
+    await _createMaintenanceTable(db);
   }
 
   Future<void> _createFuelEntriesTable(Database db) async {
     await db.execute('''
-    CREATE TABLE fuel_entries (
-      id TEXT PRIMARY KEY,
-      vehicle_id TEXT NOT NULL,
-      date TEXT NOT NULL,
-      mileage INTEGER NOT NULL,
-      liters REAL NOT NULL,
-      price_per_liter REAL NOT NULL,
-      total_price REAL NOT NULL,
-      is_full_tank INTEGER NOT NULL DEFAULT 1,
-      station TEXT,
-      notes TEXT,
-      FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
-        ON DELETE CASCADE
-    )
-  ''');
+      CREATE TABLE fuel_entries (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        mileage INTEGER NOT NULL,
+        liters REAL NOT NULL,
+        price_per_liter REAL NOT NULL,
+        total_price REAL NOT NULL,
+        is_full_tank INTEGER NOT NULL DEFAULT 1,
+        station TEXT,
+        notes TEXT,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<void> _createExpensesTable(Database db) async {
     await db.execute('''
-    CREATE TABLE expenses (
-      id TEXT PRIMARY KEY,
-      vehicle_id TEXT NOT NULL,
-      date TEXT NOT NULL,
-      category TEXT NOT NULL,
-      amount REAL NOT NULL,
-      title TEXT NOT NULL,
-      mileage INTEGER,
-      notes TEXT,
-      FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
-        ON DELETE CASCADE
-    )
-  ''');
+      CREATE TABLE expenses (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        category TEXT NOT NULL,
+        amount REAL NOT NULL,
+        title TEXT NOT NULL,
+        mileage INTEGER,
+        notes TEXT,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _createMaintenanceTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE maintenance_entries (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        cost REAL NOT NULL,
+        mileage INTEGER NOT NULL,
+        notes TEXT,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<void> _upgradeDatabase(
@@ -112,8 +134,13 @@ class AppDatabase {
     if (oldVersion < 3) {
       await _createFuelEntriesTable(db);
     }
+
     if (oldVersion < 4) {
       await _createExpensesTable(db);
+    }
+
+    if (oldVersion < 5) {
+      await _createMaintenanceTable(db);
     }
   }
 
@@ -245,5 +272,47 @@ class AppDatabase {
     final db = await database;
 
     await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<MaintenanceEntry>> getMaintenanceEntries({
+    String? vehicleId,
+  }) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'maintenance_entries',
+      where: vehicleId == null ? null : 'vehicle_id = ?',
+      whereArgs: vehicleId == null ? null : [vehicleId],
+      orderBy: 'date DESC, mileage DESC',
+    );
+
+    return maps.map(MaintenanceEntry.fromMap).toList();
+  }
+
+  Future<void> insertMaintenanceEntry(MaintenanceEntry entry) async {
+    final db = await database;
+
+    await db.insert(
+      'maintenance_entries',
+      entry.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateMaintenanceEntry(MaintenanceEntry entry) async {
+    final db = await database;
+
+    await db.update(
+      'maintenance_entries',
+      entry.toMap(),
+      where: 'id = ?',
+      whereArgs: [entry.id],
+    );
+  }
+
+  Future<void> deleteMaintenanceEntry(String id) async {
+    final db = await database;
+
+    await db.delete('maintenance_entries', where: 'id = ?', whereArgs: [id]);
   }
 }

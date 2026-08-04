@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../models/expense.dart';
-import '../../services/expense_provider.dart';
 import '../../models/fuel_entry.dart';
+import '../../models/maintenance_entry.dart';
 import '../../models/vehicle.dart';
+import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
+import '../../services/maintenance_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
-import 'add_vehicle_dialog.dart';
 import '../expenses/expenses_page.dart';
 import '../fuel/fuel_page.dart';
+import '../maintenance/maintenance_page.dart';
+import 'add_vehicle_dialog.dart';
 
 class VehicleDetailPage extends ConsumerWidget {
   const VehicleDetailPage({super.key, required this.vehicleId});
@@ -60,6 +64,7 @@ class VehicleDetailPage extends ConsumerWidget {
     final vehiclesAsync = ref.watch(vehicleProvider);
     final fuelEntriesAsync = ref.watch(fuelEntryProvider);
     final expensesAsync = ref.watch(expenseProvider);
+    final maintenanceAsync = ref.watch(maintenanceProvider);
 
     final loadedVehicles = vehiclesAsync.asData?.value ?? <Vehicle>[];
 
@@ -134,6 +139,13 @@ class VehicleDetailPage extends ConsumerWidget {
 
           final totalVehicleCosts = vehicleStatistics.totalCost + totalExpenses;
 
+          final allMaintenanceEntries =
+              maintenanceAsync.asData?.value ?? <MaintenanceEntry>[];
+
+          final vehicleMaintenanceEntries = allMaintenanceEntries
+              .where((entry) => entry.vehicleId == vehicle.id)
+              .toList();
+
           final latestFuelEntry = vehicleFuelEntries.isEmpty
               ? null
               : vehicleFuelEntries.last;
@@ -144,6 +156,7 @@ class VehicleDetailPage extends ConsumerWidget {
                 ref.read(vehicleProvider.notifier).reload(),
                 ref.read(fuelEntryProvider.notifier).reload(),
                 ref.read(expenseProvider.notifier).reload(),
+                ref.read(maintenanceProvider.notifier).reload(),
               ]);
             },
             child: ListView(
@@ -152,7 +165,6 @@ class VehicleDetailPage extends ConsumerWidget {
               children: [
                 _VehicleHeaderCard(vehicle: vehicle),
                 const SizedBox(height: 24),
-
                 Text(
                   'Übersicht',
                   style: Theme.of(
@@ -160,7 +172,6 @@ class VehicleDetailPage extends ConsumerWidget {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -182,6 +193,11 @@ class VehicleDetailPage extends ConsumerWidget {
                       value: '${_formatDecimal(totalVehicleCosts, 2)} €',
                     ),
                     _DetailTile(
+                      icon: Icons.build_outlined,
+                      title: 'Wartungen',
+                      value: vehicleMaintenanceEntries.length.toString(),
+                    ),
+                    _DetailTile(
                       icon: Icons.local_gas_station_outlined,
                       title: 'Tankvorgänge',
                       value: vehicleStatistics.refuels.toString(),
@@ -195,7 +211,6 @@ class VehicleDetailPage extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-
                 Text(
                   'Letzter Tankvorgang',
                   style: Theme.of(
@@ -203,7 +218,6 @@ class VehicleDetailPage extends ConsumerWidget {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-
                 if (latestFuelEntry == null)
                   const _EmptyFuelCard()
                 else
@@ -216,20 +230,16 @@ class VehicleDetailPage extends ConsumerWidget {
                       2,
                     ),
                     onTap: () {
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (context) {
-        return FuelPage(
-          vehicleId: vehicle.id,
-        );
-      },
-    ),
-  );
-},
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) {
+                            return FuelPage(vehicleId: vehicle.id);
+                          },
+                        ),
+                      );
+                    },
                   ),
-
                 const SizedBox(height: 24),
-
                 Text(
                   'Fahrzeugakte',
                   style: Theme.of(
@@ -237,52 +247,53 @@ class VehicleDetailPage extends ConsumerWidget {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-
                 _MenuCard(
                   icon: Icons.local_gas_station_outlined,
                   title: 'Tankvorgänge',
                   subtitle:
                       '${vehicleStatistics.refuels} Tankvorgänge gespeichert',
                   onTap: () {
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (context) {
-        return FuelPage(
-          vehicleId: vehicle.id,
-        );
-      },
-    ),
-  );
-},
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) {
+                          return FuelPage(vehicleId: vehicle.id);
+                        },
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
-
                 _MenuCard(
                   icon: Icons.receipt_long_outlined,
                   title: 'Kosten',
                   subtitle: '${vehicleExpenses.length} Ausgaben gespeichert',
                   onTap: () {
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (context) {
-        return ExpensesPage(
-          vehicleId: vehicle.id,
-        );
-      },
-    ),
-  );
-},
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) {
+                          return ExpensesPage(vehicleId: vehicle.id);
+                        },
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
-
                 _MenuCard(
                   icon: Icons.build_outlined,
                   title: 'Wartungen',
-                  subtitle: 'Service, TÜV und Reparaturen',
-                  onTap: () {},
+                  subtitle:
+                      '${vehicleMaintenanceEntries.length} Wartungen gespeichert',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) {
+                          return MaintenancePage(vehicleId: vehicle.id);
+                        },
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
-
                 _MenuCard(
                   icon: Icons.tire_repair,
                   title: 'Reifen',
@@ -290,7 +301,6 @@ class VehicleDetailPage extends ConsumerWidget {
                   onTap: () {},
                 ),
                 const SizedBox(height: 12),
-
                 _MenuCard(
                   icon: Icons.description_outlined,
                   title: 'Dokumente',
