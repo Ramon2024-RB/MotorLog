@@ -6,6 +6,7 @@ import '../../models/vehicle.dart';
 import '../../services/vehicle_provider.dart';
 import '../../models/fuel_entry.dart';
 import '../../services/fuel_entry_provider.dart';
+import '../../utils/vehicle_statistics_calculator.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -15,9 +16,7 @@ class DashboardPage extends ConsumerStatefulWidget {
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
-  final PageController _pageController = PageController(
-    viewportFraction: 0.9,
-  );
+  final PageController _pageController = PageController(viewportFraction: 0.9);
 
   int _selectedVehicleIndex = 0;
 
@@ -39,9 +38,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         return 1;
       }
 
-      return first.name.toLowerCase().compareTo(
-            second.name.toLowerCase(),
-          );
+      return first.name.toLowerCase().compareTo(second.name.toLowerCase());
     });
 
     return sortedVehicles;
@@ -77,89 +74,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     }
   }
 
-  _DashboardStats _calculateDashboardStats(
-    List<FuelEntry> entries,
-  ) {
-    if (entries.isEmpty) {
-      return const _DashboardStats();
-    }
-
-    final now = DateTime.now();
-
-    final monthlyEntries = entries.where((entry) {
-      return entry.date.year == now.year &&
-          entry.date.month == now.month;
-    }).toList();
-
-    final monthlyFuelCosts = monthlyEntries.fold<double>(
-      0,
-      (sum, entry) => sum + entry.totalPrice,
-    );
-
-    var monthlyDistance = 0;
-
-    if (monthlyEntries.length >= 2) {
-      final mileages = monthlyEntries
-          .map((entry) => entry.mileage)
-          .toList()
-        ..sort();
-
-      monthlyDistance = mileages.last - mileages.first;
-    }
-
-    return _DashboardStats(
-      averageConsumption: _calculateAverageConsumption(entries),
-      monthlyFuelCosts: monthlyFuelCosts,
-      monthlyDistance: monthlyDistance,
-      monthlyFuelEntryCount: monthlyEntries.length,
-    );
-  }
-
-  double? _calculateAverageConsumption(
-    List<FuelEntry> entries,
-  ) {
-    final fullTankEntries = entries
-        .where((entry) => entry.isFullTank)
-        .toList()
-      ..sort(
-        (a, b) => a.mileage.compareTo(b.mileage),
-      );
-
-    if (fullTankEntries.length < 2) {
-      return null;
-    }
-
-    var totalDistance = 0;
-    var totalLiters = 0.0;
-
-    for (var i = 1; i < fullTankEntries.length; i++) {
-      final previous = fullTankEntries[i - 1];
-      final current = fullTankEntries[i];
-
-      final distance = current.mileage - previous.mileage;
-
-      if (distance <= 0) {
-        continue;
-      }
-
-      totalDistance += distance;
-      totalLiters += current.liters;
-    }
-
-    if (totalDistance == 0) {
-      return null;
-    }
-
-    return totalLiters / totalDistance * 100;
-  }
-
-  String _formatDecimal(
-    double value,
-    int decimalPlaces,
-  ) {
-    return value
-        .toStringAsFixed(decimalPlaces)
-        .replaceAll('.', ',');
+  String _formatDecimal(double value, int decimalPlaces) {
+    return value.toStringAsFixed(decimalPlaces).replaceAll('.', ',');
   }
 
   @override
@@ -171,9 +87,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       appBar: AppBar(
         title: const Text(
           'MotorLog',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
@@ -189,9 +103,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ],
       ),
       body: vehiclesAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) {
           return Center(
             child: Padding(
@@ -199,10 +111,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.error_outline,
-                    size: 52,
-                  ),
+                  const Icon(Icons.error_outline, size: 52),
                   const SizedBox(height: 16),
                   const Text(
                     'Das Dashboard konnte nicht geladen werden.',
@@ -235,22 +144,19 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             _selectedVehicleIndex = 0;
           }
 
-          final selectedVehicle =
-              sortedVehicles[_selectedVehicleIndex];
-              final allFuelEntries = fuelEntriesAsync.asData?.value ?? <FuelEntry>[];
+          final selectedVehicle = sortedVehicles[_selectedVehicleIndex];
+          final allFuelEntries =
+              fuelEntriesAsync.asData?.value ?? <FuelEntry>[];
 
-final selectedVehicleEntries = allFuelEntries
-    .where(
-      (entry) => entry.vehicleId == selectedVehicle.id,
-    )
-    .toList()
-  ..sort(
-    (first, second) => first.date.compareTo(second.date),
-  );
+          final selectedVehicleEntries =
+              allFuelEntries
+                  .where((entry) => entry.vehicleId == selectedVehicle.id)
+                  .toList()
+                ..sort((first, second) => first.date.compareTo(second.date));
 
-final dashboardStats = _calculateDashboardStats(
-  selectedVehicleEntries,
-);
+          final vehicleStatistics = calculateVehicleStatistics(
+            selectedVehicleEntries,
+          );
 
           return RefreshIndicator(
             onRefresh: () {
@@ -263,12 +169,9 @@ final dashboardStats = _calculateDashboardStats(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                   child: Text(
                     'Guten Tag, Nico',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 Padding(
@@ -294,14 +197,11 @@ final dashboardStats = _calculateDashboardStats(
                       final vehicle = sortedVehicles[index];
 
                       return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                         child: _VehicleCarouselCard(
                           vehicle: vehicle,
                           icon: _vehicleIcon(vehicle.vehicleType),
-                          formattedMileage:
-                              _formatMileage(vehicle.mileage),
+                          formattedMileage: _formatMileage(vehicle.mileage),
                           onTap: () {
                             context.go('/vehicles');
                           },
@@ -315,32 +215,22 @@ final dashboardStats = _calculateDashboardStats(
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      sortedVehicles.length,
-                      (index) {
-                        final isSelected =
-                            index == _selectedVehicleIndex;
+                    children: List.generate(sortedVehicles.length, (index) {
+                      final isSelected = index == _selectedVehicleIndex;
 
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          width: isSelected ? 22 : 8,
-                          height: 8,
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .outlineVariant,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        );
-                      },
-                    ),
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        width: isSelected ? 22 : 8,
+                        height: 8,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      );
+                    }),
                   ),
                 ],
 
@@ -389,9 +279,7 @@ final dashboardStats = _calculateDashboardStats(
 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: const _SectionTitle(
-                    title: 'Aktuelle Übersicht',
-                  ),
+                  child: const _SectionTitle(title: 'Aktuelle Übersicht'),
                 ),
                 const SizedBox(height: 12),
 
@@ -405,39 +293,55 @@ final dashboardStats = _calculateDashboardStats(
                     crossAxisSpacing: 12,
                     childAspectRatio: 1.25,
                     children: [
-  _DashboardStatCard(
-    icon: Icons.speed,
-    value: dashboardStats.averageConsumption == null
-        ? '–'
-        : _formatDecimal(
-            dashboardStats.averageConsumption!,
-            1,
-          ),
-    unit: 'l/100 km',
-    label: 'Ø Verbrauch',
-  ),
-  _DashboardStatCard(
-    icon: Icons.euro,
-    value: _formatDecimal(
-      dashboardStats.monthlyFuelCosts,
-      2,
-    ),
-    unit: '€',
-    label: 'Tankkosten im Monat',
-  ),
-  _DashboardStatCard(
-    icon: Icons.route,
-    value: dashboardStats.monthlyDistance.toString(),
-    unit: 'km',
-    label: 'Diesen Monat',
-  ),
-  _DashboardStatCard(
-    icon: Icons.local_gas_station_outlined,
-              value: dashboardStats.monthlyFuelEntryCount.toString(),
-               unit: '',
-                label: 'Tankvorgänge',
-                ),
-                ],
+                      _DashboardStatCard(
+                        icon: Icons.speed,
+                        value: vehicleStatistics.averageConsumption <= 0
+                            ? '–'
+                            : _formatDecimal(
+                                vehicleStatistics.averageConsumption,
+                                1,
+                              ),
+                        unit: 'l/100 km',
+                        label: 'Ø Verbrauch',
+                      ),
+                      _DashboardStatCard(
+                        icon: Icons.local_gas_station_outlined,
+                        value: vehicleStatistics.averageFuelPrice <= 0
+                            ? '–'
+                            : _formatDecimal(
+                                vehicleStatistics.averageFuelPrice,
+                                3,
+                              ),
+                        unit: '€/l',
+                        label: 'Ø Kraftstoffpreis',
+                      ),
+                      _DashboardStatCard(
+                        icon: Icons.payments_outlined,
+                        value: vehicleStatistics.costPer100Km <= 0
+                            ? '–'
+                            : _formatDecimal(vehicleStatistics.costPer100Km, 2),
+                        unit: '€/100 km',
+                        label: 'Fahrkosten',
+                      ),
+                      _DashboardStatCard(
+                        icon: Icons.route,
+                        value: _formatMileage(vehicleStatistics.totalDistance),
+                        unit: 'km',
+                        label: 'Ausgewertet',
+                      ),
+                      _DashboardStatCard(
+                        icon: Icons.euro,
+                        value: _formatDecimal(vehicleStatistics.totalCost, 2),
+                        unit: '€',
+                        label: 'Gesamte Tankkosten',
+                      ),
+                      _DashboardStatCard(
+                        icon: Icons.format_list_numbered,
+                        value: vehicleStatistics.refuels.toString(),
+                        unit: '',
+                        label: 'Tankvorgänge',
+                      ),
+                    ],
                   ),
                 ),
 
@@ -445,9 +349,7 @@ final dashboardStats = _calculateDashboardStats(
 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: const _SectionTitle(
-                    title: 'Nächste Aufgaben',
-                  ),
+                  child: const _SectionTitle(title: 'Nächste Aufgaben'),
                 ),
                 const SizedBox(height: 12),
 
@@ -469,20 +371,6 @@ final dashboardStats = _calculateDashboardStats(
       ),
     );
   }
-}
-
-class _DashboardStats {
-  const _DashboardStats({
-    this.averageConsumption,
-    this.monthlyFuelCosts = 0,
-    this.monthlyDistance = 0,
-    this.monthlyFuelEntryCount = 0,
-  });
-
-  final double? averageConsumption;
-  final double monthlyFuelCosts;
-  final int monthlyDistance;
-  final int monthlyFuelEntryCount;
 }
 
 class _VehicleCarouselCard extends StatelessWidget {
@@ -518,11 +406,7 @@ class _VehicleCarouselCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 29,
                     backgroundColor: colorScheme.primary,
-                    child: Icon(
-                      icon,
-                      size: 31,
-                      color: colorScheme.onPrimary,
-                    ),
+                    child: Icon(icon, size: 31, color: colorScheme.onPrimary),
                   ),
                   const Spacer(),
                   if (vehicle.isDefault)
@@ -561,12 +445,9 @@ class _VehicleCarouselCard extends StatelessWidget {
                 vehicle.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 5),
               Text(
@@ -600,12 +481,9 @@ class _VehicleCarouselCard extends StatelessWidget {
                   const SizedBox(width: 7),
                   Text(
                     '$formattedMileage km',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
                   const Icon(Icons.chevron_right),
@@ -620,10 +498,7 @@ class _VehicleCarouselCard extends StatelessWidget {
 }
 
 class _VehicleDetailChip extends StatelessWidget {
-  const _VehicleDetailChip({
-    required this.icon,
-    required this.label,
-  });
+  const _VehicleDetailChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -631,15 +506,9 @@ class _VehicleDetailChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 6,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surface
-            .withValues(alpha: 0.65),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -647,12 +516,7 @@ class _VehicleDetailChip extends StatelessWidget {
         children: [
           Icon(icon, size: 15),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -736,10 +600,7 @@ class _DashboardStatCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              icon,
-              color: colorScheme.primary,
-            ),
+            Icon(icon, color: colorScheme.primary),
             const Spacer(),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -804,9 +665,7 @@ class _UpcomingTaskCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              child: Icon(icon),
-            ),
+            CircleAvatar(child: Icon(icon)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -822,10 +681,7 @@ class _UpcomingTaskCard extends StatelessWidget {
                   const SizedBox(height: 5),
                   Text(subtitle),
                   const SizedBox(height: 9),
-                  TextButton(
-                    onPressed: onTap,
-                    child: Text(actionText),
-                  ),
+                  TextButton(onPressed: onTap, child: Text(actionText)),
                 ],
               ),
             ),
@@ -837,11 +693,7 @@ class _UpcomingTaskCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    this.actionText,
-    this.onAction,
-  });
+  const _SectionTitle({required this.title, this.actionText, this.onAction});
 
   final String title;
   final String? actionText;
@@ -854,25 +706,20 @@ class _SectionTitle extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
         if (actionText != null)
-          TextButton(
-            onPressed: onAction,
-            child: Text(actionText!),
-          ),
+          TextButton(onPressed: onAction, child: Text(actionText!)),
       ],
     );
   }
 }
 
 class _EmptyDashboard extends StatelessWidget {
-  const _EmptyDashboard({
-    required this.onAddVehicle,
-  });
+  const _EmptyDashboard({required this.onAddVehicle});
 
   final VoidCallback onAddVehicle;
 
@@ -892,9 +739,9 @@ class _EmptyDashboard extends StatelessWidget {
             const SizedBox(height: 20),
             Text(
               'Willkommen bei MotorLog',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             const Text(
