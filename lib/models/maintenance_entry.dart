@@ -8,6 +8,8 @@ class MaintenanceEntry {
     required this.cost,
     required this.mileage,
     this.notes,
+    this.nextMileage,
+    this.nextDate,
   });
 
   final String id;
@@ -18,6 +20,8 @@ class MaintenanceEntry {
   final double cost;
   final int mileage;
   final String? notes;
+  final int? nextMileage;
+  final DateTime? nextDate;
 
   Map<String, Object?> toMap() {
     return {
@@ -29,12 +33,12 @@ class MaintenanceEntry {
       'cost': cost,
       'mileage': mileage,
       'notes': notes,
+      'next_mileage': nextMileage,
+      'next_date': nextDate?.toIso8601String(),
     };
   }
 
-  factory MaintenanceEntry.fromMap(
-    Map<String, Object?> map,
-  ) {
+  factory MaintenanceEntry.fromMap(Map<String, Object?> map) {
     return MaintenanceEntry(
       id: map['id'] as String,
       vehicleId: map['vehicle_id'] as String,
@@ -44,6 +48,10 @@ class MaintenanceEntry {
       cost: (map['cost'] as num).toDouble(),
       mileage: map['mileage'] as int,
       notes: map['notes'] as String?,
+      nextMileage: map['next_mileage'] as int?,
+      nextDate: map['next_date'] == null
+          ? null
+          : DateTime.parse(map['next_date'] as String),
     );
   }
 }

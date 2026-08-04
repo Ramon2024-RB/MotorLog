@@ -223,7 +223,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           icon: _vehicleIcon(vehicle.vehicleType),
                           formattedMileage: _formatMileage(vehicle.mileage),
                           onTap: () {
-                            context.go('/vehicles');
+                            context.go('/vehicles/${vehicle.id}');
                           },
                         ),
                       );
