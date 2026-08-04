@@ -2,17 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../models/vehicle.dart';
-import '../../services/vehicle_provider.dart';
 import '../../models/fuel_entry.dart';
+import '../../models/vehicle.dart';
 import '../../services/fuel_entry_provider.dart';
+import '../../services/vehicle_provider.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
 
   @override
-  ConsumerState<DashboardPage> createState() => _DashboardPageState();
+  ConsumerState<DashboardPage> createState() {
+    return _DashboardPageState();
+  }
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
@@ -61,6 +63,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     return buffer.toString();
   }
 
+  String _formatDecimal(double value, int decimalPlaces) {
+    return value.toStringAsFixed(decimalPlaces).replaceAll('.', ',');
+  }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day.$month.${date.year}';
+  }
+
   IconData _vehicleIcon(String vehicleType) {
     switch (vehicleType.toLowerCase()) {
       case 'camper':
@@ -72,10 +85,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       default:
         return Icons.directions_car;
     }
-  }
-
-  String _formatDecimal(double value, int decimalPlaces) {
-    return value.toStringAsFixed(decimalPlaces).replaceAll('.', ',');
   }
 
   @override
@@ -117,6 +126,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     'Das Dashboard konnte nicht geladen werden.',
                     textAlign: TextAlign.center,
                   ),
+                  const SizedBox(height: 12),
+                  Text(error.toString(), textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
@@ -145,6 +156,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           }
 
           final selectedVehicle = sortedVehicles[_selectedVehicleIndex];
+
           final allFuelEntries =
               fuelEntriesAsync.asData?.value ?? <FuelEntry>[];
 
@@ -158,11 +170,19 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             selectedVehicleEntries,
           );
 
+          final latestFuelEntry = selectedVehicleEntries.isEmpty
+              ? null
+              : selectedVehicleEntries.last;
+
           return RefreshIndicator(
-            onRefresh: () {
-              return ref.read(vehicleProvider.notifier).reload();
+            onRefresh: () async {
+              await Future.wait([
+                ref.read(vehicleProvider.notifier).reload(),
+                ref.read(fuelEntryProvider.notifier).reload(),
+              ]);
             },
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 32),
               children: [
                 Padding(
@@ -236,50 +256,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
                 const SizedBox(height: 28),
 
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _SectionTitle(
-                    title: 'Schnellaktionen',
-                    actionText: 'Alle anzeigen',
-                    onAction: () {},
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _QuickActionCard(
-                          icon: Icons.local_gas_station,
-                          title: 'Tanken',
-                          subtitle: 'Tankvorgang erfassen',
-                          onTap: () {
-                            context.go('/fuel');
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _QuickActionCard(
-                          icon: Icons.receipt_long,
-                          title: 'Kosten',
-                          subtitle: 'Ausgabe hinzufügen',
-                          onTap: () {
-                            context.go('/expenses');
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 28),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: const _SectionTitle(title: 'Aktuelle Übersicht'),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: _SectionTitle(title: 'Aktuelle Übersicht'),
                 ),
                 const SizedBox(height: 12),
 
@@ -347,9 +326,31 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
                 const SizedBox(height: 28),
 
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: _SectionTitle(title: 'Letzter Tankvorgang'),
+                ),
+                const SizedBox(height: 12),
+
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: const _SectionTitle(title: 'Nächste Aufgaben'),
+                  child: latestFuelEntry == null
+                      ? const _NoLatestFuelCard()
+                      : _LatestFuelCard(
+                          entry: latestFuelEntry,
+                          formatDate: _formatDate,
+                          formatDecimal: _formatDecimal,
+                          onTap: () {
+                            context.go('/fuel');
+                          },
+                        ),
+                ),
+
+                const SizedBox(height: 28),
+
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: _SectionTitle(title: 'Nächste Aufgaben'),
                 ),
                 const SizedBox(height: 12),
 
@@ -394,8 +395,10 @@ class _VehicleCarouselCard extends StatelessWidget {
       elevation: 0,
       clipBehavior: Clip.antiAlias,
       color: colorScheme.primaryContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
         child: Padding(
           padding: const EdgeInsets.all(22),
           child: Column(
@@ -457,13 +460,14 @@ class _VehicleCarouselCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 13),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _VehicleDetailChip(
                     icon: Icons.category_outlined,
                     label: vehicle.vehicleType,
                   ),
-                  const SizedBox(width: 8),
                   _VehicleDetailChip(
                     icon: Icons.local_gas_station_outlined,
                     label: vehicle.fuelType,
@@ -523,58 +527,6 @@ class _VehicleDetailChip extends StatelessWidget {
   }
 }
 
-class _QuickActionCard extends StatelessWidget {
-  const _QuickActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(17),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                icon,
-                size: 31,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 15),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _DashboardStatCard extends StatelessWidget {
   const _DashboardStatCard({
     required this.icon,
@@ -595,6 +547,7 @@ class _DashboardStatCard extends StatelessWidget {
     return Card(
       elevation: 0,
       color: colorScheme.surfaceContainerHighest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: Padding(
         padding: const EdgeInsets.all(17),
         child: Column(
@@ -640,6 +593,114 @@ class _DashboardStatCard extends StatelessWidget {
   }
 }
 
+class _LatestFuelCard extends StatelessWidget {
+  const _LatestFuelCard({
+    required this.entry,
+    required this.formatDate,
+    required this.formatDecimal,
+    required this.onTap,
+  });
+
+  final FuelEntry entry;
+  final String Function(DateTime) formatDate;
+  final String Function(double, int) formatDecimal;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 27,
+                backgroundColor: colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.local_gas_station,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.station ?? 'Tankvorgang',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      formatDate(entry.date),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 6,
+                      children: [
+                        Text(
+                          '${formatDecimal(entry.liters, 2)} Liter',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          '${formatDecimal(entry.totalPrice, 2)} €',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoLatestFuelCard extends StatelessWidget {
+  const _NoLatestFuelCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: const Padding(
+        padding: EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Icon(Icons.local_gas_station_outlined),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Für dieses Fahrzeug wurde noch kein Tankvorgang gespeichert.',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _UpcomingTaskCard extends StatelessWidget {
   const _UpcomingTaskCard({
     required this.icon,
@@ -660,6 +721,7 @@ class _UpcomingTaskCard extends StatelessWidget {
     return Card(
       elevation: 0,
       color: Theme.of(context).colorScheme.secondaryContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(
@@ -693,27 +755,17 @@ class _UpcomingTaskCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, this.actionText, this.onAction});
+  const _SectionTitle({required this.title});
 
   final String title;
-  final String? actionText;
-  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-        if (actionText != null)
-          TextButton(onPressed: onAction, child: Text(actionText!)),
-      ],
+    return Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 }

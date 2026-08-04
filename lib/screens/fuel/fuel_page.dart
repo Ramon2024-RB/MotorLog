@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../models/fuel_entry.dart';
 import '../../models/vehicle.dart';
 import '../../services/fuel_entry_provider.dart';
@@ -8,7 +7,9 @@ import '../../services/vehicle_provider.dart';
 import 'add_fuel_entry_dialog.dart';
 
 class FuelPage extends ConsumerWidget {
-  const FuelPage({super.key});
+  const FuelPage({super.key, this.vehicleId});
+
+  final String? vehicleId;
 
   Future<void> _openAddDialog(BuildContext context) async {
     await showDialog<void>(
@@ -19,10 +20,7 @@ class FuelPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _openEditDialog(
-    BuildContext context,
-    FuelEntry entry,
-  ) async {
+  Future<void> _openEditDialog(BuildContext context, FuelEntry entry) async {
     await showDialog<void>(
       context: context,
       builder: (context) {
@@ -46,13 +44,11 @@ class FuelPage extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(false),
+              onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Abbrechen'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(true),
+              onPressed: () => Navigator.of(context).pop(true),
               child: const Text('Löschen'),
             ),
           ],
@@ -61,9 +57,7 @@ class FuelPage extends ConsumerWidget {
     );
 
     if (shouldDelete == true) {
-      await ref
-          .read(fuelEntryProvider.notifier)
-          .deleteFuelEntry(entry.id);
+      await ref.read(fuelEntryProvider.notifier).deleteFuelEntry(entry.id);
     }
   }
 
@@ -80,9 +74,7 @@ class FuelPage extends ConsumerWidget {
         ),
       ),
       body: vehiclesAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => Center(
           child: Text(
             'Fahrzeuge konnten nicht geladen werden.\n$error',
@@ -91,35 +83,25 @@ class FuelPage extends ConsumerWidget {
         ),
         data: (vehicles) {
           return entriesAsync.when(
-            loading: () => const Center(
-              child: CircularProgressIndicator(),
-            ),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, stackTrace) => Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 48,
-                    ),
+                    const Icon(Icons.error_outline, size: 48),
                     const SizedBox(height: 16),
                     const Text(
                       'Tankvorgänge konnten nicht geladen werden.',
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      error.toString(),
-                      textAlign: TextAlign.center,
-                    ),
+                    Text(error.toString(), textAlign: TextAlign.center),
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: () {
-                        ref
-                            .read(fuelEntryProvider.notifier)
-                            .reload();
+                        ref.read(fuelEntryProvider.notifier).reload();
                       },
                       child: const Text('Erneut versuchen'),
                     ),
@@ -128,45 +110,39 @@ class FuelPage extends ConsumerWidget {
               ),
             ),
             data: (entries) {
+              final visibleEntries = vehicleId == null
+                  ? entries
+                  : entries
+                        .where((entry) => entry.vehicleId == vehicleId)
+                        .toList();
+
               if (vehicles.isEmpty) {
-                return _NoVehicleView(
-                  onAddVehicle: () {},
-                );
+                return _NoVehicleView(onAddVehicle: () {});
               }
 
-              if (entries.isEmpty) {
+              if (visibleEntries.isEmpty) {
                 return _EmptyFuelView(
-                  onAddFuelEntry: () =>
-                      _openAddDialog(context),
+                  onAddFuelEntry: () => _openAddDialog(context),
                 );
               }
 
               final vehicleMap = {
-                for (final vehicle in vehicles)
-                  vehicle.id: vehicle,
+                for (final vehicle in vehicles) vehicle.id: vehicle,
               };
 
               return RefreshIndicator(
                 onRefresh: () {
-                  return ref
-                      .read(fuelEntryProvider.notifier)
-                      .reload();
+                  return ref.read(fuelEntryProvider.notifier).reload();
                 },
                 child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                    16,
-                    16,
-                    16,
-                    100,
-                  ),
-                  itemCount: entries.length,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                  itemCount: visibleEntries.length,
                   separatorBuilder: (context, index) {
                     return const SizedBox(height: 12);
                   },
                   itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    final vehicle =
-                        vehicleMap[entry.vehicleId];
+                    final entry = visibleEntries[index];
+                    final vehicle = vehicleMap[entry.vehicleId];
 
                     return _FuelEntryCard(
                       entry: entry,
@@ -175,11 +151,7 @@ class FuelPage extends ConsumerWidget {
                         _openEditDialog(context, entry);
                       },
                       onDelete: () {
-                        _confirmDelete(
-                          context,
-                          ref,
-                          entry,
-                        );
+                        _confirmDelete(context, ref, entry);
                       },
                     );
                   },
@@ -213,140 +185,145 @@ class _FuelEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          16,
-          16,
-          8,
-          16,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 27,
-              child: const Icon(
-                Icons.local_gas_station,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    vehicle?.name ?? 'Unbekanntes Fahrzeug',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatDate(entry.date),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    children: [
-                      _EntryValue(
-                        label: 'Liter',
-                        value: _formatNumber(
-                          entry.liters,
-                          2,
-                        ),
-                      ),
-                      _EntryValue(
-                        label: 'Preis/L',
-                        value:
-                            '${_formatNumber(entry.pricePerLiter, 3)} €',
-                      ),
-                      _EntryValue(
-                        label: 'Gesamt',
-                        value:
-                            '${_formatNumber(entry.totalPrice, 2)} €',
-                      ),
-                      _EntryValue(
-                        label: 'Kilometer',
-                        value: '${entry.mileage} km',
-                      ),
-                    ],
-                  ),
-                  if (entry.station != null) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.storefront_outlined,
-                          size: 17,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(entry.station!),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        entry.isFullTank
-                            ? Icons.check_circle_outline
-                            : Icons.info_outline,
-                        size: 17,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        entry.isFullTank
-                            ? 'Vollgetankt'
-                            : 'Teilbetankung',
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'edit') {
-                  onEdit();
-                }
+    final colorScheme = Theme.of(context).colorScheme;
 
-                if (value == 'delete') {
-                  onDelete();
-                }
-              },
-              itemBuilder: (context) {
-                return const [
-                  PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_outlined),
-                        SizedBox(width: 12),
-                        Text('Bearbeiten'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline),
-                        SizedBox(width: 12),
-                        Text('Löschen'),
-                      ],
-                    ),
-                  ),
-                ];
-              },
+    return Dismissible(
+      key: ValueKey(entry.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        onDelete();
+        return false;
+      },
+      background: Container(
+        padding: const EdgeInsets.only(right: 24),
+        alignment: Alignment.centerRight,
+        decoration: BoxDecoration(
+          color: colorScheme.error,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.delete_outline, color: colorScheme.onError, size: 30),
+            const SizedBox(height: 4),
+            Text(
+              'Löschen',
+              style: TextStyle(
+                color: colorScheme.onError,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
+        ),
+      ),
+      child: Card(
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onEdit,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: colorScheme.primaryContainer,
+                  child: Icon(
+                    Icons.local_gas_station,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        vehicle?.name ?? 'Unbekanntes Fahrzeug',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatDate(entry.date),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [
+                          _EntryValue(
+                            label: 'Liter',
+                            value: _formatNumber(entry.liters, 2),
+                          ),
+                          _EntryValue(
+                            label: 'Preis/L',
+                            value: '${_formatNumber(entry.pricePerLiter, 3)} €',
+                          ),
+                          _EntryValue(
+                            label: 'Gesamt',
+                            value: '${_formatNumber(entry.totalPrice, 2)} €',
+                          ),
+                          _EntryValue(
+                            label: 'Kilometer',
+                            value: '${entry.mileage} km',
+                          ),
+                        ],
+                      ),
+                      if (entry.station != null) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.storefront_outlined, size: 17),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text(entry.station!)),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Icon(
+                            entry.isFullTank
+                                ? Icons.check_circle_outline
+                                : Icons.info_outline,
+                            size: 17,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            entry.isFullTank ? 'Vollgetankt' : 'Teilbetankung',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.touch_app_outlined,
+                            size: 16,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Antippen zum Bearbeiten',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -359,21 +336,13 @@ class _FuelEntryCard extends StatelessWidget {
     return '$day.$month.${date.year}';
   }
 
-  static String _formatNumber(
-    double value,
-    int decimalPlaces,
-  ) {
-    return value
-        .toStringAsFixed(decimalPlaces)
-        .replaceAll('.', ',');
+  static String _formatNumber(double value, int decimalPlaces) {
+    return value.toStringAsFixed(decimalPlaces).replaceAll('.', ',');
   }
 }
 
 class _EntryValue extends StatelessWidget {
-  const _EntryValue({
-    required this.label,
-    required this.value,
-  });
+  const _EntryValue({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -381,30 +350,17 @@ class _EntryValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 7,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
+          Text(label, style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -412,9 +368,7 @@ class _EntryValue extends StatelessWidget {
 }
 
 class _EmptyFuelView extends StatelessWidget {
-  const _EmptyFuelView({
-    required this.onAddFuelEntry,
-  });
+  const _EmptyFuelView({required this.onAddFuelEntry});
 
   final VoidCallback onAddFuelEntry;
 
@@ -434,12 +388,9 @@ class _EmptyFuelView extends StatelessWidget {
             const SizedBox(height: 20),
             Text(
               'Noch keine Tankvorgänge',
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -460,9 +411,7 @@ class _EmptyFuelView extends StatelessWidget {
 }
 
 class _NoVehicleView extends StatelessWidget {
-  const _NoVehicleView({
-    required this.onAddVehicle,
-  });
+  const _NoVehicleView({required this.onAddVehicle});
 
   final VoidCallback onAddVehicle;
 

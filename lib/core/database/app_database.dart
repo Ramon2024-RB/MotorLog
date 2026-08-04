@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../models/vehicle.dart';
 import '../../models/fuel_entry.dart';
+import '../../models/expense.dart';
 
 class AppDatabase {
   AppDatabase._();
@@ -10,7 +11,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _databaseName = 'motorlog.db';
-  static const _databaseVersion = 3;
+  static const _databaseVersion = 4;
 
   Database? _database;
 
@@ -52,10 +53,11 @@ class AppDatabase {
       )
     ''');
     await _createFuelEntriesTable(db);
+    await _createExpensesTable(db);
   }
 
   Future<void> _createFuelEntriesTable(Database db) async {
-  await db.execute('''
+    await db.execute('''
     CREATE TABLE fuel_entries (
       id TEXT PRIMARY KEY,
       vehicle_id TEXT NOT NULL,
@@ -71,7 +73,24 @@ class AppDatabase {
         ON DELETE CASCADE
     )
   ''');
-}
+  }
+
+  Future<void> _createExpensesTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE expenses (
+      id TEXT PRIMARY KEY,
+      vehicle_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount REAL NOT NULL,
+      title TEXT NOT NULL,
+      mileage INTEGER,
+      notes TEXT,
+      FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+        ON DELETE CASCADE
+    )
+  ''');
+  }
 
   Future<void> _upgradeDatabase(
     Database db,
@@ -93,15 +112,15 @@ class AppDatabase {
     if (oldVersion < 3) {
       await _createFuelEntriesTable(db);
     }
+    if (oldVersion < 4) {
+      await _createExpensesTable(db);
+    }
   }
 
   Future<List<Vehicle>> getVehicles() async {
     final db = await database;
 
-    final maps = await db.query(
-      'vehicles',
-      orderBy: 'name COLLATE NOCASE ASC',
-    );
+    final maps = await db.query('vehicles', orderBy: 'name COLLATE NOCASE ASC');
 
     return maps.map(Vehicle.fromMap).toList();
   }
@@ -130,21 +149,14 @@ class AppDatabase {
   Future<void> deleteVehicle(String id) async {
     final db = await database;
 
-    await db.delete(
-      'vehicles',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('vehicles', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> setDefaultVehicle(String vehicleId) async {
     final db = await database;
 
     await db.transaction((transaction) async {
-      await transaction.update(
-        'vehicles',
-        {'is_default': 0},
-      );
+      await transaction.update('vehicles', {'is_default': 0});
 
       await transaction.update(
         'vehicles',
@@ -154,49 +166,84 @@ class AppDatabase {
       );
     });
   }
-  Future<List<FuelEntry>> getFuelEntries({
-  String? vehicleId,
-}) async {
-  final db = await database;
 
-  final maps = await db.query(
-    'fuel_entries',
-    where: vehicleId == null ? null : 'vehicle_id = ?',
-    whereArgs: vehicleId == null ? null : [vehicleId],
-    orderBy: 'date DESC, mileage DESC',
-  );
+  Future<List<FuelEntry>> getFuelEntries({String? vehicleId}) async {
+    final db = await database;
 
-  return maps.map(FuelEntry.fromMap).toList();
-}
+    final maps = await db.query(
+      'fuel_entries',
+      where: vehicleId == null ? null : 'vehicle_id = ?',
+      whereArgs: vehicleId == null ? null : [vehicleId],
+      orderBy: 'date DESC, mileage DESC',
+    );
 
-Future<void> insertFuelEntry(FuelEntry entry) async {
-  final db = await database;
+    return maps.map(FuelEntry.fromMap).toList();
+  }
 
-  await db.insert(
-    'fuel_entries',
-    entry.toMap(),
-    conflictAlgorithm: ConflictAlgorithm.replace,
-  );
-}
+  Future<void> insertFuelEntry(FuelEntry entry) async {
+    final db = await database;
 
-Future<void> updateFuelEntry(FuelEntry entry) async {
-  final db = await database;
+    await db.insert(
+      'fuel_entries',
+      entry.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
 
-  await db.update(
-    'fuel_entries',
-    entry.toMap(),
-    where: 'id = ?',
-    whereArgs: [entry.id],
-  );
-}
+  Future<void> updateFuelEntry(FuelEntry entry) async {
+    final db = await database;
 
-Future<void> deleteFuelEntry(String id) async {
-  final db = await database;
+    await db.update(
+      'fuel_entries',
+      entry.toMap(),
+      where: 'id = ?',
+      whereArgs: [entry.id],
+    );
+  }
 
-  await db.delete(
-    'fuel_entries',
-    where: 'id = ?',
-    whereArgs: [id],
-  );
-}
+  Future<void> deleteFuelEntry(String id) async {
+    final db = await database;
+
+    await db.delete('fuel_entries', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Expense>> getExpenses({String? vehicleId}) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'expenses',
+      where: vehicleId == null ? null : 'vehicle_id = ?',
+      whereArgs: vehicleId == null ? null : [vehicleId],
+      orderBy: 'date DESC',
+    );
+
+    return maps.map(Expense.fromMap).toList();
+  }
+
+  Future<void> insertExpense(Expense expense) async {
+    final db = await database;
+
+    await db.insert(
+      'expenses',
+      expense.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateExpense(Expense expense) async {
+    final db = await database;
+
+    await db.update(
+      'expenses',
+      expense.toMap(),
+      where: 'id = ?',
+      whereArgs: [expense.id],
+    );
+  }
+
+  Future<void> deleteExpense(String id) async {
+    final db = await database;
+
+    await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
+  }
 }

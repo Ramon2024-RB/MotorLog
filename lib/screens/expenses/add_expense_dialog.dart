@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../models/fuel_entry.dart';
+import '../../models/expense.dart';
 import '../../models/vehicle.dart';
-import '../../services/fuel_entry_provider.dart';
+import '../../services/expense_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../widgets/motorlog/motorlog_button.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
@@ -12,139 +12,84 @@ import '../../widgets/motorlog/motorlog_dropdown.dart';
 import '../../widgets/motorlog/motorlog_section.dart';
 import '../../widgets/motorlog/motorlog_text_field.dart';
 
-class AddFuelEntryDialog extends ConsumerStatefulWidget {
-  const AddFuelEntryDialog({super.key, this.entry});
+class AddExpenseDialog extends ConsumerStatefulWidget {
+  const AddExpenseDialog({super.key, this.expense});
 
-  final FuelEntry? entry;
+  final Expense? expense;
 
   @override
-  ConsumerState<AddFuelEntryDialog> createState() {
-    return _AddFuelEntryDialogState();
+  ConsumerState<AddExpenseDialog> createState() {
+    return _AddExpenseDialogState();
   }
 }
 
-class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
+class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
   final _formKey = GlobalKey<FormState>();
 
+  late final TextEditingController _titleController;
+  late final TextEditingController _amountController;
   late final TextEditingController _mileageController;
-  late final TextEditingController _litersController;
-  late final TextEditingController _pricePerLiterController;
-  late final TextEditingController _totalPriceController;
-  late final TextEditingController _stationController;
   late final TextEditingController _notesController;
 
   String? _selectedVehicleId;
+  late String _selectedCategory;
   late DateTime _selectedDate;
-  late bool _isFullTank;
 
   bool _isSaving = false;
-  bool _isUpdatingTotalPrice = false;
 
-  bool get _isEditing => widget.entry != null;
+  bool get _isEditing => widget.expense != null;
+
+  static const List<String> _categories = [
+    'Wartung',
+    'Reparatur',
+    'Reifen',
+    'Versicherung',
+    'Steuer',
+    'TÜV',
+    'Parken',
+    'Maut',
+    'Camping',
+    'Zubehör',
+    'Sonstiges',
+  ];
 
   @override
   void initState() {
     super.initState();
 
-    final entry = widget.entry;
+    final expense = widget.expense;
 
-    _selectedVehicleId = entry?.vehicleId;
-    _selectedDate = entry?.date ?? DateTime.now();
-    _isFullTank = entry?.isFullTank ?? true;
+    _selectedVehicleId = expense?.vehicleId;
+    _selectedCategory = expense?.category ?? 'Wartung';
+    _selectedDate = expense?.date ?? DateTime.now();
+
+    _titleController = TextEditingController(text: expense?.title ?? '');
+
+    _amountController = TextEditingController(
+      text: expense == null
+          ? ''
+          : expense.amount.toStringAsFixed(2).replaceAll('.', ','),
+    );
 
     _mileageController = TextEditingController(
-      text: entry?.mileage.toString() ?? '',
+      text: expense?.mileage?.toString() ?? '',
     );
 
-    _litersController = TextEditingController(
-      text: entry == null
-          ? ''
-          : entry.liters.toStringAsFixed(2).replaceAll('.', ','),
-    );
-
-    _pricePerLiterController = TextEditingController(
-      text: entry == null
-          ? ''
-          : entry.pricePerLiter.toStringAsFixed(3).replaceAll('.', ','),
-    );
-
-    _totalPriceController = TextEditingController(
-      text: entry == null
-          ? ''
-          : entry.totalPrice.toStringAsFixed(2).replaceAll('.', ','),
-    );
-
-    _stationController = TextEditingController(text: entry?.station ?? '');
-
-    _notesController = TextEditingController(text: entry?.notes ?? '');
-
-    _litersController.addListener(_calculateTotalPrice);
-    _pricePerLiterController.addListener(_calculateTotalPrice);
+    _notesController = TextEditingController(text: expense?.notes ?? '');
   }
 
   @override
   void dispose() {
-    _litersController.removeListener(_calculateTotalPrice);
-    _pricePerLiterController.removeListener(_calculateTotalPrice);
-
+    _titleController.dispose();
+    _amountController.dispose();
     _mileageController.dispose();
-    _litersController.dispose();
-    _pricePerLiterController.dispose();
-    _totalPriceController.dispose();
-    _stationController.dispose();
     _notesController.dispose();
 
     super.dispose();
   }
 
   double? _parseDecimal(String value) {
-    final normalized = value.trim().replaceAll(',', '.');
-    return double.tryParse(normalized);
-  }
-
-  void _calculateTotalPrice() {
-    if (_isUpdatingTotalPrice) {
-      return;
-    }
-
-    final liters = _parseDecimal(_litersController.text);
-    final pricePerLiter = _parseDecimal(_pricePerLiterController.text);
-
-    if (liters == null || pricePerLiter == null) {
-      return;
-    }
-
-    final totalPrice = liters * pricePerLiter;
-
-    _isUpdatingTotalPrice = true;
-
-    _totalPriceController.text = totalPrice
-        .toStringAsFixed(2)
-        .replaceAll('.', ',');
-
-    _isUpdatingTotalPrice = false;
-  }
-
-  String? _validateRequired(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Pflichtfeld';
-    }
-
-    return null;
-  }
-
-  String? _validatePositiveDecimal(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Pflichtfeld';
-    }
-
-    final parsed = _parseDecimal(value);
-
-    if (parsed == null || parsed <= 0) {
-      return 'Bitte einen gültigen Wert eingeben';
-    }
-
-    return null;
+    return double.tryParse(value.trim().replaceAll(',', '.'));
   }
 
   Future<void> _selectDate() async {
@@ -152,7 +97,7 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
     );
 
     if (selectedDate != null && mounted) {
@@ -162,7 +107,7 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
     }
   }
 
-  Future<void> _saveEntry() async {
+  Future<void> _saveExpense() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -174,18 +119,17 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
       return;
     }
 
-    final mileage = int.tryParse(_mileageController.text.trim());
+    final amount = _parseDecimal(_amountController.text);
 
-    final liters = _parseDecimal(_litersController.text);
+    final mileageText = _mileageController.text.trim();
 
-    final pricePerLiter = _parseDecimal(_pricePerLiterController.text);
+    final mileage = mileageText.isEmpty ? null : int.tryParse(mileageText);
 
-    final totalPrice = _parseDecimal(_totalPriceController.text);
+    if (amount == null || amount <= 0) {
+      return;
+    }
 
-    if (mileage == null ||
-        liters == null ||
-        pricePerLiter == null ||
-        totalPrice == null) {
+    if (mileageText.isNotEmpty && mileage == null) {
       return;
     }
 
@@ -193,27 +137,23 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
       _isSaving = true;
     });
 
-    final entry = FuelEntry(
-      id: widget.entry?.id ?? const Uuid().v4(),
+    final expense = Expense(
+      id: widget.expense?.id ?? const Uuid().v4(),
       vehicleId: _selectedVehicleId!,
       date: _selectedDate,
+      category: _selectedCategory,
+      amount: amount,
+      title: _titleController.text.trim(),
       mileage: mileage,
-      liters: liters,
-      pricePerLiter: pricePerLiter,
-      totalPrice: totalPrice,
-      isFullTank: _isFullTank,
-      station: _stationController.text.trim().isEmpty
-          ? null
-          : _stationController.text.trim(),
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
     );
 
     if (_isEditing) {
-      await ref.read(fuelEntryProvider.notifier).updateFuelEntry(entry);
+      await ref.read(expenseProvider.notifier).updateExpense(expense);
     } else {
-      await ref.read(fuelEntryProvider.notifier).addFuelEntry(entry);
+      await ref.read(expenseProvider.notifier).addExpense(expense);
     }
 
     if (mounted) {
@@ -249,16 +189,14 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
     return Dialog.fullscreen(
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            _isEditing ? 'Tankvorgang bearbeiten' : 'Tankvorgang hinzufügen',
-          ),
+          title: Text(_isEditing ? 'Ausgabe bearbeiten' : 'Ausgabe hinzufügen'),
           leading: IconButton(
             onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
             icon: const Icon(Icons.close),
           ),
           actions: [
             TextButton(
-              onPressed: _isSaving ? null : _saveEntry,
+              onPressed: _isSaving ? null : _saveExpense,
               child: _isSaving
                   ? const SizedBox(
                       width: 20,
@@ -306,10 +244,10 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                 children: [
                   MotorLogSection(
                     title: 'Fahrzeug',
-                    subtitle: 'Wähle das Fahrzeug für diesen Tankvorgang aus.',
+                    subtitle: 'Wähle das Fahrzeug für diese Ausgabe aus.',
                     child: Column(
                       children: [
-                        _SelectedVehicleCard(vehicle: selectedVehicle),
+                        _SelectedExpenseVehicleCard(vehicle: selectedVehicle),
                         const SizedBox(height: 14),
                         MotorLogDropdown<String>(
                           value: _selectedVehicleId,
@@ -334,8 +272,82 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                   ),
 
                   MotorLogSection(
-                    title: 'Tankdaten',
-                    subtitle: 'Kilometerstand, Menge und Kraftstoffpreise.',
+                    title: 'Ausgabe',
+                    subtitle: 'Kategorie, Bezeichnung und Betrag.',
+                    child: MotorLogCard(
+                      margin: EdgeInsets.zero,
+                      child: Column(
+                        children: [
+                          MotorLogDropdown<String>(
+                            value: _selectedCategory,
+                            label: 'Kategorie',
+                            icon: _categoryIcon(_selectedCategory),
+                            items: _categories.map((category) {
+                              return DropdownMenuItem<String>(
+                                value: category,
+                                child: Text(category),
+                              );
+                            }).toList(),
+                            onChanged: _isSaving
+                                ? null
+                                : (value) {
+                                    if (value != null) {
+                                      setState(() {
+                                        _selectedCategory = value;
+                                      });
+                                    }
+                                  },
+                          ),
+                          const SizedBox(height: 16),
+
+                          MotorLogTextField(
+                            controller: _titleController,
+                            label: 'Bezeichnung',
+                            hint: 'Zum Beispiel: Ölwechsel',
+                            icon: Icons.edit_outlined,
+                            textInputAction: TextInputAction.next,
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Pflichtfeld';
+                              }
+
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+
+                          MotorLogTextField(
+                            controller: _amountController,
+                            label: 'Betrag',
+                            hint: '89,90',
+                            suffixText: '€',
+                            icon: Icons.euro,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            textInputAction: TextInputAction.next,
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Pflichtfeld';
+                              }
+
+                              final amount = _parseDecimal(value);
+
+                              if (amount == null || amount <= 0) {
+                                return 'Bitte einen gültigen Betrag eingeben';
+                              }
+
+                              return null;
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  MotorLogSection(
+                    title: 'Details',
+                    subtitle: 'Datum und optionaler Kilometerstand.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: Column(
@@ -380,13 +392,11 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                             keyboardType: TextInputType.number,
                             textInputAction: TextInputAction.next,
                             validator: (value) {
-                              final requiredError = _validateRequired(value);
-
-                              if (requiredError != null) {
-                                return requiredError;
+                              if (value == null || value.trim().isEmpty) {
+                                return null;
                               }
 
-                              final mileage = int.tryParse(value!.trim());
+                              final mileage = int.tryParse(value.trim());
 
                               if (mileage == null || mileage < 0) {
                                 return 'Bitte einen gültigen Kilometerstand eingeben';
@@ -395,97 +405,23 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 16),
-
-                          MotorLogTextField(
-                            controller: _litersController,
-                            label: 'Getankte Menge',
-                            hint: '55,40',
-                            suffixText: 'Liter',
-                            icon: Icons.local_gas_station_outlined,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            textInputAction: TextInputAction.next,
-                            validator: _validatePositiveDecimal,
-                          ),
-                          const SizedBox(height: 16),
-
-                          MotorLogTextField(
-                            controller: _pricePerLiterController,
-                            label: 'Preis pro Liter',
-                            hint: '1,679',
-                            suffixText: '€',
-                            icon: Icons.euro,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            textInputAction: TextInputAction.next,
-                            validator: _validatePositiveDecimal,
-                          ),
-                          const SizedBox(height: 16),
-
-                          MotorLogTextField(
-                            controller: _totalPriceController,
-                            label: 'Gesamtpreis',
-                            hint: '93,02',
-                            suffixText: '€',
-                            icon: Icons.payments_outlined,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            validator: _validatePositiveDecimal,
-                          ),
                         ],
                       ),
                     ),
                   ),
 
                   MotorLogSection(
-                    title: 'Weitere Angaben',
-                    subtitle: 'Volltank, Tankstelle und optionale Notizen.',
+                    title: 'Notizen',
+                    subtitle: 'Zusätzliche Informationen zur Ausgabe.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
-                      child: Column(
-                        children: [
-                          SwitchListTile.adaptive(
-                            value: _isFullTank,
-                            onChanged: _isSaving
-                                ? null
-                                : (value) {
-                                    setState(() {
-                                      _isFullTank = value;
-                                    });
-                                  },
-                            title: const Text('Vollgetankt'),
-                            subtitle: Text(
-                              _isFullTank
-                                  ? 'Der Tank wurde vollständig gefüllt.'
-                                  : 'Es handelt sich um eine Teilbetankung.',
-                            ),
-                            secondary: const Icon(Icons.local_gas_station),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          const SizedBox(height: 16),
-
-                          MotorLogTextField(
-                            controller: _stationController,
-                            label: 'Tankstelle',
-                            hint: 'Zum Beispiel: Aral',
-                            icon: Icons.storefront_outlined,
-                            textInputAction: TextInputAction.next,
-                          ),
-                          const SizedBox(height: 16),
-
-                          MotorLogTextField(
-                            controller: _notesController,
-                            label: 'Notizen',
-                            hint: 'Optional',
-                            icon: Icons.notes,
-                            minLines: 3,
-                            maxLines: 5,
-                          ),
-                        ],
+                      child: MotorLogTextField(
+                        controller: _notesController,
+                        label: 'Notizen',
+                        hint: 'Optional',
+                        icon: Icons.notes,
+                        minLines: 4,
+                        maxLines: 6,
                       ),
                     ),
                   ),
@@ -495,10 +431,10 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                     child: MotorLogButton(
                       label: _isEditing
                           ? 'Änderungen speichern'
-                          : 'Tankvorgang speichern',
+                          : 'Ausgabe speichern',
                       icon: Icons.save_outlined,
                       isLoading: _isSaving,
-                      onPressed: _isSaving ? null : _saveEntry,
+                      onPressed: _isSaving ? null : _saveExpense,
                     ),
                   ),
                 ],
@@ -509,10 +445,37 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
       ),
     );
   }
+
+  IconData _categoryIcon(String category) {
+    switch (category) {
+      case 'Wartung':
+        return Icons.build_outlined;
+      case 'Reparatur':
+        return Icons.handyman_outlined;
+      case 'Reifen':
+        return Icons.tire_repair;
+      case 'Versicherung':
+        return Icons.shield_outlined;
+      case 'Steuer':
+        return Icons.account_balance_outlined;
+      case 'TÜV':
+        return Icons.fact_check_outlined;
+      case 'Parken':
+        return Icons.local_parking;
+      case 'Maut':
+        return Icons.route;
+      case 'Camping':
+        return Icons.cabin_outlined;
+      case 'Zubehör':
+        return Icons.shopping_bag_outlined;
+      default:
+        return Icons.receipt_long_outlined;
+    }
+  }
 }
 
-class _SelectedVehicleCard extends StatelessWidget {
-  const _SelectedVehicleCard({required this.vehicle});
+class _SelectedExpenseVehicleCard extends StatelessWidget {
+  const _SelectedExpenseVehicleCard({required this.vehicle});
 
   final Vehicle vehicle;
 
@@ -572,15 +535,15 @@ class _SelectedVehicleCard extends StatelessWidget {
                     spacing: 8,
                     runSpacing: 6,
                     children: [
-                      _VehicleInfoChip(
+                      _ExpenseVehicleInfoChip(
                         icon: Icons.category_outlined,
                         label: vehicle.vehicleType,
                       ),
-                      _VehicleInfoChip(
+                      _ExpenseVehicleInfoChip(
                         icon: Icons.local_gas_station_outlined,
                         label: vehicle.fuelType,
                       ),
-                      _VehicleInfoChip(
+                      _ExpenseVehicleInfoChip(
                         icon: Icons.speed,
                         label: '${vehicle.mileage} km',
                       ),
@@ -596,8 +559,8 @@ class _SelectedVehicleCard extends StatelessWidget {
   }
 }
 
-class _VehicleInfoChip extends StatelessWidget {
-  const _VehicleInfoChip({required this.icon, required this.label});
+class _ExpenseVehicleInfoChip extends StatelessWidget {
+  const _ExpenseVehicleInfoChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;

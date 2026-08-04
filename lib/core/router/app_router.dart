@@ -4,6 +4,7 @@ import '../../screens/app_shell.dart';
 import '../../screens/dashboard/dashboard_page.dart';
 import '../../screens/expenses/expenses_page.dart';
 import '../../screens/fuel/fuel_page.dart';
+import '../../screens/vehicles/vehicle_detail_page.dart';
 import '../../screens/vehicles/vehicles_page.dart';
 
 final GoRouter appRouter = GoRouter(
@@ -11,16 +12,16 @@ final GoRouter appRouter = GoRouter(
   routes: [
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
-        return AppShell(
-          navigationShell: navigationShell,
-        );
+        return AppShell(navigationShell: navigationShell);
       },
       branches: [
         StatefulShellBranch(
           routes: [
             GoRoute(
               path: '/',
-              builder: (context, state) => const DashboardPage(),
+              builder: (context, state) {
+                return const DashboardPage();
+              },
             ),
           ],
         ),
@@ -28,7 +29,9 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/fuel',
-              builder: (context, state) => const FuelPage(),
+              builder: (context, state) {
+                return const FuelPage();
+              },
             ),
           ],
         ),
@@ -36,7 +39,9 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/expenses',
-              builder: (context, state) => const ExpensesPage(),
+              builder: (context, state) {
+                return const ExpensesPage();
+              },
             ),
           ],
         ),
@@ -44,7 +49,19 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/vehicles',
-              builder: (context, state) => const VehiclesPage(),
+              builder: (context, state) {
+                return const VehiclesPage();
+              },
+              routes: [
+                GoRoute(
+                  path: ':vehicleId',
+                  builder: (context, state) {
+                    final vehicleId = state.pathParameters['vehicleId']!;
+
+                    return VehicleDetailPage(vehicleId: vehicleId);
+                  },
+                ),
+              ],
             ),
           ],
         ),
