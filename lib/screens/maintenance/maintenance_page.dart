@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'add_maintenance_dialog.dart';
+
 import '../../models/maintenance_entry.dart';
 import '../../models/vehicle.dart';
 import '../../services/maintenance_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
+import 'add_maintenance_dialog.dart';
 
 class MaintenancePage extends ConsumerWidget {
   const MaintenancePage({super.key, this.vehicleId});
@@ -91,9 +92,12 @@ class MaintenancePage extends ConsumerWidget {
       body: vehiclesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => Center(
-          child: Text(
-            'Fahrzeuge konnten nicht geladen werden.\n$error',
-            textAlign: TextAlign.center,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Fahrzeuge konnten nicht geladen werden.\n$error',
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
         data: (vehicles) {
@@ -110,7 +114,7 @@ class MaintenancePage extends ConsumerWidget {
             ),
             data: (entries) {
               final visibleEntries = vehicleId == null
-                  ? entries
+                  ? [...entries]
                   : entries
                         .where((entry) => entry.vehicleId == vehicleId)
                         .toList();
@@ -118,6 +122,28 @@ class MaintenancePage extends ConsumerWidget {
               final vehicleMap = {
                 for (final vehicle in vehicles) vehicle.id: vehicle,
               };
+
+              visibleEntries.sort((first, second) {
+                final firstStatus = MaintenanceStatus.calculate(
+                  entry: first,
+                  vehicle: vehicleMap[first.vehicleId],
+                );
+
+                final secondStatus = MaintenanceStatus.calculate(
+                  entry: second,
+                  vehicle: vehicleMap[second.vehicleId],
+                );
+
+                final statusComparison = firstStatus.priority.compareTo(
+                  secondStatus.priority,
+                );
+
+                if (statusComparison != 0) {
+                  return statusComparison;
+                }
+
+                return second.date.compareTo(first.date);
+              });
 
               if (visibleEntries.isEmpty) {
                 return _EmptyMaintenanceView(
@@ -132,6 +158,7 @@ class MaintenancePage extends ConsumerWidget {
                   return ref.read(maintenanceProvider.notifier).reload();
                 },
                 child: ListView.separated(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
                   itemCount: visibleEntries.length,
                   separatorBuilder: (context, index) {
@@ -188,6 +215,89 @@ class MaintenancePage extends ConsumerWidget {
   }
 }
 
+enum MaintenanceStatusType { overdue, dueSoon, okay, noReminder }
+
+class MaintenanceStatus {
+  const MaintenanceStatus({
+    required this.type,
+    required this.label,
+    required this.description,
+    required this.priority,
+  });
+
+  final MaintenanceStatusType type;
+  final String label;
+  final String description;
+  final int priority;
+
+  static MaintenanceStatus calculate({
+    required MaintenanceEntry entry,
+    required Vehicle? vehicle,
+  }) {
+    final today = DateUtils.dateOnly(DateTime.now());
+
+    final nextDate = switch (entry.nextDate) {
+      final date? => DateUtils.dateOnly(date),
+      null => null,
+    };
+
+    final currentMileage = vehicle?.mileage;
+    final nextMileage = entry.nextMileage;
+
+    final dateOverdue = nextDate != null && !nextDate.isAfter(today);
+
+    final mileageOverdue =
+        nextMileage != null &&
+        currentMileage != null &&
+        currentMileage >= nextMileage;
+
+    if (dateOverdue || mileageOverdue) {
+      return const MaintenanceStatus(
+        type: MaintenanceStatusType.overdue,
+        label: 'Überfällig',
+        description: 'Die Wartung ist fällig oder bereits überschritten.',
+        priority: 0,
+      );
+    }
+
+    final daysRemaining = nextDate?.difference(today).inDays;
+
+    final kilometersRemaining = nextMileage == null || currentMileage == null
+        ? null
+        : nextMileage - currentMileage;
+
+    final dateDueSoon = daysRemaining != null && daysRemaining <= 30;
+
+    final mileageDueSoon =
+        kilometersRemaining != null && kilometersRemaining <= 1000;
+
+    if (dateDueSoon || mileageDueSoon) {
+      return const MaintenanceStatus(
+        type: MaintenanceStatusType.dueSoon,
+        label: 'Bald fällig',
+        description: 'Die Wartung steht in Kürze an.',
+        priority: 1,
+      );
+    }
+
+    if (nextDate != null || nextMileage != null) {
+      return const MaintenanceStatus(
+        type: MaintenanceStatusType.okay,
+        label: 'Alles in Ordnung',
+        description: 'Die nächste Wartung ist noch nicht fällig.',
+        priority: 2,
+      );
+    }
+
+    return const MaintenanceStatus(
+      type: MaintenanceStatusType.noReminder,
+      label: 'Keine Erinnerung',
+      description: 'Für diese Wartung wurde kein Intervall festgelegt.',
+      priority: 3,
+    );
+  }
+}
+
 class _MaintenanceCard extends StatelessWidget {
   const _MaintenanceCard({
     required this.entry,
@@ -202,6 +312,10 @@ class _MaintenanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    final status = MaintenanceStatus.calculate(entry: entry, vehicle: vehicle);
+
+    final statusColor = _statusColor(context, status.type);
 
     return MotorLogCard(
       margin: EdgeInsets.zero,
@@ -227,12 +341,48 @@ class _MaintenanceCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      entry.title,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.title,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _statusIcon(status.type),
+                                size: 14,
+                                color: statusColor,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                status.label,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -255,23 +405,151 @@ class _MaintenanceCard extends StatelessWidget {
                         ),
                         _MaintenanceValue(
                           label: 'Kilometer',
-                          value: '${entry.mileage} km',
+                          value: '${_formatMileage(entry.mileage)} km',
                         ),
                       ],
                     ),
-                    if (entry.notes != null) ...[
+                    if (entry.nextMileage != null ||
+                        entry.nextDate != null) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: statusColor.withValues(alpha: 0.28),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.notifications_active_outlined,
+                                  size: 18,
+                                  color: statusColor,
+                                ),
+                                const SizedBox(width: 7),
+                                Text(
+                                  'Nächste Wartung',
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (entry.nextMileage != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Bei ${_formatMileage(entry.nextMileage!)} km'
+                                '${_mileageRemainingText(entry, vehicle)}',
+                              ),
+                            ],
+                            if (entry.nextDate != null) ...[
+                              const SizedBox(height: 5),
+                              Text(
+                                'Am ${_formatDate(entry.nextDate!)}'
+                                '${_dateRemainingText(entry.nextDate!)}',
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (entry.notes != null && entry.notes!.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      Text(entry.notes!),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.notes, size: 17),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(entry.notes!)),
+                        ],
+                      ),
                     ],
                   ],
                 ),
               ),
+              const SizedBox(width: 4),
               const Icon(Icons.chevron_right),
             ],
           ),
         ),
       ),
     );
+  }
+
+  static Color _statusColor(BuildContext context, MaintenanceStatusType type) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    switch (type) {
+      case MaintenanceStatusType.overdue:
+        return colorScheme.error;
+      case MaintenanceStatusType.dueSoon:
+        return colorScheme.tertiary;
+      case MaintenanceStatusType.okay:
+        return colorScheme.primary;
+      case MaintenanceStatusType.noReminder:
+        return colorScheme.outline;
+    }
+  }
+
+  static IconData _statusIcon(MaintenanceStatusType type) {
+    switch (type) {
+      case MaintenanceStatusType.overdue:
+        return Icons.error_outline;
+      case MaintenanceStatusType.dueSoon:
+        return Icons.warning_amber_rounded;
+      case MaintenanceStatusType.okay:
+        return Icons.check_circle_outline;
+      case MaintenanceStatusType.noReminder:
+        return Icons.notifications_off_outlined;
+    }
+  }
+
+  static String _mileageRemainingText(
+    MaintenanceEntry entry,
+    Vehicle? vehicle,
+  ) {
+    if (entry.nextMileage == null || vehicle == null) {
+      return '';
+    }
+
+    final remaining = entry.nextMileage! - vehicle.mileage;
+
+    if (remaining < 0) {
+      return ' · ${_formatMileage(remaining.abs())} km überfällig';
+    }
+
+    if (remaining == 0) {
+      return ' · jetzt fällig';
+    }
+
+    return ' · noch ${_formatMileage(remaining)} km';
+  }
+
+  static String _dateRemainingText(DateTime nextDate) {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final date = DateUtils.dateOnly(nextDate);
+    final remaining = date.difference(today).inDays;
+
+    if (remaining < 0) {
+      return ' · seit ${remaining.abs()} Tagen überfällig';
+    }
+
+    if (remaining == 0) {
+      return ' · heute fällig';
+    }
+
+    if (remaining == 1) {
+      return ' · morgen fällig';
+    }
+
+    return ' · noch $remaining Tage';
   }
 
   static IconData _categoryIcon(String category) {
@@ -286,6 +564,18 @@ class _MaintenanceCard extends StatelessWidget {
         return Icons.verified_outlined;
       case 'Zahnriemen':
         return Icons.settings_outlined;
+      case 'Luftfilter':
+        return Icons.air_outlined;
+      case 'Innenraumfilter':
+        return Icons.airline_seat_recline_normal;
+      case 'Kraftstofffilter':
+        return Icons.local_gas_station_outlined;
+      case 'Zündkerzen':
+        return Icons.electric_bolt_outlined;
+      case 'Kühlmittel':
+        return Icons.ac_unit_outlined;
+      case 'Getriebeöl':
+        return Icons.settings_suggest_outlined;
       default:
         return Icons.build_outlined;
     }
@@ -300,6 +590,23 @@ class _MaintenanceCard extends StatelessWidget {
 
   static String _formatNumber(double value) {
     return value.toStringAsFixed(2).replaceAll('.', ',');
+  }
+
+  static String _formatMileage(int mileage) {
+    final text = mileage.toString();
+    final buffer = StringBuffer();
+
+    for (var index = 0; index < text.length; index++) {
+      final positionFromEnd = text.length - index;
+
+      buffer.write(text[index]);
+
+      if (positionFromEnd > 1 && positionFromEnd % 3 == 1) {
+        buffer.write('.');
+      }
+    }
+
+    return buffer.toString();
   }
 }
 
@@ -356,7 +663,7 @@ class _EmptyMaintenanceView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Erfasse deine erste Wartung.',
+              'Erfasse deine erste Wartung und lege optional eine Erinnerung fest.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),

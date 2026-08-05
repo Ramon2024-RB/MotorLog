@@ -30,11 +30,13 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _costController;
   late final TextEditingController _mileageController;
+  late final TextEditingController _nextMileageController;
   late final TextEditingController _notesController;
 
   String? _selectedVehicleId;
   late String _selectedCategory;
   late DateTime _selectedDate;
+  DateTime? _nextDate;
 
   bool _isSaving = false;
 
@@ -64,6 +66,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     _selectedVehicleId = entry?.vehicleId ?? widget.initialVehicleId;
     _selectedCategory = entry?.category ?? 'Ölwechsel';
     _selectedDate = entry?.date ?? DateTime.now();
+    _nextDate = entry?.nextDate;
 
     _titleController = TextEditingController(text: entry?.title ?? '');
 
@@ -77,6 +80,10 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
       text: entry?.mileage.toString() ?? '',
     );
 
+    _nextMileageController = TextEditingController(
+      text: entry?.nextMileage?.toString() ?? '',
+    );
+
     _notesController = TextEditingController(text: entry?.notes ?? '');
   }
 
@@ -85,6 +92,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     _titleController.dispose();
     _costController.dispose();
     _mileageController.dispose();
+    _nextMileageController.dispose();
     _notesController.dispose();
 
     super.dispose();
@@ -123,6 +131,24 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     }
   }
 
+  Future<void> _selectNextDate() async {
+    final today = DateTime.now();
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate:
+          _nextDate ?? DateTime(today.year + 1, today.month, today.day),
+      firstDate: DateTime(today.year, today.month, today.day),
+      lastDate: DateTime(today.year + 20, 12, 31),
+    );
+
+    if (selectedDate != null && mounted) {
+      setState(() {
+        _nextDate = selectedDate;
+      });
+    }
+  }
+
   Future<void> _saveMaintenance() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -136,7 +162,17 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
 
     final mileage = int.tryParse(_mileageController.text.trim());
 
+    final nextMileageText = _nextMileageController.text.trim();
+
+    final nextMileage = nextMileageText.isEmpty
+        ? null
+        : int.tryParse(nextMileageText);
+
     if (cost == null || mileage == null) {
+      return;
+    }
+
+    if (nextMileageText.isNotEmpty && nextMileage == null) {
       return;
     }
 
@@ -152,6 +188,8 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
       title: _titleController.text.trim(),
       cost: cost,
       mileage: mileage,
+      nextMileage: nextMileage,
+      nextDate: _nextDate,
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
@@ -330,6 +368,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                         children: [
                           InkWell(
                             onTap: _isSaving ? null : _selectDate,
+                            borderRadius: BorderRadius.circular(18),
                             child: InputDecorator(
                               decoration: const InputDecoration(
                                 labelText: 'Datum',
@@ -355,6 +394,79 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
 
                               return null;
                             },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  MotorLogSection(
+                    title: 'Erinnerung',
+                    subtitle:
+                        'Optional nach Kilometerstand oder Datum erinnern.',
+                    child: MotorLogCard(
+                      margin: EdgeInsets.zero,
+                      child: Column(
+                        children: [
+                          MotorLogTextField(
+                            controller: _nextMileageController,
+                            label: 'Nächste Wartung bei',
+                            hint: '110000',
+                            suffixText: 'km',
+                            icon: Icons.notification_add_outlined,
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return null;
+                              }
+
+                              final nextMileage = int.tryParse(value.trim());
+
+                              if (nextMileage == null || nextMileage < 0) {
+                                return 'Ungültiger Kilometerstand';
+                              }
+
+                              final currentMileage = int.tryParse(
+                                _mileageController.text.trim(),
+                              );
+
+                              if (currentMileage != null &&
+                                  nextMileage <= currentMileage) {
+                                return 'Muss über dem aktuellen Kilometerstand liegen';
+                              }
+
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          InkWell(
+                            onTap: _isSaving ? null : _selectNextDate,
+                            borderRadius: BorderRadius.circular(18),
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: 'Nächstes Wartungsdatum',
+                                prefixIcon: const Icon(
+                                  Icons.event_repeat_outlined,
+                                ),
+                                suffixIcon: _nextDate == null
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Datum entfernen',
+                                        onPressed: _isSaving
+                                            ? null
+                                            : () {
+                                                setState(() {
+                                                  _nextDate = null;
+                                                });
+                                              },
+                                        icon: const Icon(Icons.close),
+                                      ),
+                              ),
+                              child: Text(
+                                _nextDate == null
+                                    ? 'Kein Datum ausgewählt'
+                                    : _formatDate(_nextDate!),
+                              ),
+                            ),
                           ),
                         ],
                       ),
