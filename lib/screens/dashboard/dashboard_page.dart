@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/expense.dart';
 import '../../models/fuel_entry.dart';
+import '../../models/maintenance_entry.dart';
 import '../../models/vehicle.dart';
+import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
+import '../../services/maintenance_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
+import '../../widgets/dashboard/dashboard_maintenance_card.dart';
+import '../../widgets/dashboard/dashboard_quick_actions.dart';
+import '../expenses/expenses_page.dart';
+import '../maintenance/maintenance_page.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -87,10 +95,95 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     }
   }
 
+  void _openFuelPage(BuildContext context) {
+    context.go('/fuel');
+  }
+
+  void _openExpensePage(BuildContext context) {
+    context.go('/expenses');
+  }
+
+  void _openMaintenancePage(BuildContext context, Vehicle vehicle) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) {
+          return MaintenancePage(vehicleId: vehicle.id);
+        },
+      ),
+    );
+  }
+
+  void _showNewEntrySheet(BuildContext context, Vehicle vehicle) {
+    final pageContext = context;
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Neuer Eintrag',
+                style: Theme.of(
+                  sheetContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Was möchtest du hinzufügen?',
+                style: Theme.of(sheetContext).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 18),
+              _NewEntryTile(
+                icon: Icons.local_gas_station_outlined,
+                title: 'Tankvorgang',
+                subtitle: 'Eine neue Tankung erfassen',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openFuelPage(pageContext);
+                },
+              ),
+              const SizedBox(height: 10),
+              _NewEntryTile(
+                icon: Icons.receipt_long_outlined,
+                title: 'Ausgabe',
+                subtitle: 'Neue Fahrzeugkosten erfassen',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openExpensePage(pageContext);
+                },
+              ),
+              const SizedBox(height: 10),
+              _NewEntryTile(
+                icon: Icons.build_outlined,
+                title: 'Wartung',
+                subtitle: 'Eine Wartung oder Reparatur erfassen',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openMaintenancePage(pageContext, vehicle);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final vehiclesAsync = ref.watch(vehicleProvider);
     final fuelEntriesAsync = ref.watch(fuelEntryProvider);
+    final expensesAsync = ref.watch(expenseProvider);
+    final maintenanceAsync = ref.watch(maintenanceProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -98,18 +191,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           'MotorLog',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none),
-            tooltip: 'Benachrichtigungen',
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Einstellungen',
-          ),
-        ],
       ),
       body: vehiclesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -160,25 +241,53 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           final allFuelEntries =
               fuelEntriesAsync.asData?.value ?? <FuelEntry>[];
 
-          final selectedVehicleEntries =
+          final selectedVehicleFuelEntries =
               allFuelEntries
                   .where((entry) => entry.vehicleId == selectedVehicle.id)
                   .toList()
                 ..sort((first, second) => first.date.compareTo(second.date));
 
+          final allExpenses = expensesAsync.asData?.value ?? <Expense>[];
+
+          final selectedVehicleExpenses =
+              allExpenses
+                  .where((expense) => expense.vehicleId == selectedVehicle.id)
+                  .toList()
+                ..sort((first, second) => first.date.compareTo(second.date));
+
+          final allMaintenanceEntries =
+              maintenanceAsync.asData?.value ?? <MaintenanceEntry>[];
+
+          final selectedVehicleMaintenanceEntries = allMaintenanceEntries
+              .where((entry) => entry.vehicleId == selectedVehicle.id)
+              .toList();
+
           final vehicleStatistics = calculateVehicleStatistics(
-            selectedVehicleEntries,
+            selectedVehicleFuelEntries,
           );
 
-          final latestFuelEntry = selectedVehicleEntries.isEmpty
+          final latestFuelEntry = selectedVehicleFuelEntries.isEmpty
               ? null
-              : selectedVehicleEntries.last;
+              : selectedVehicleFuelEntries.last;
+
+          final latestExpense = selectedVehicleExpenses.isEmpty
+              ? null
+              : selectedVehicleExpenses.last;
+
+          final totalExpenses = selectedVehicleExpenses.fold<double>(
+            0,
+            (sum, expense) => sum + expense.amount,
+          );
+
+          final totalVehicleCosts = vehicleStatistics.totalCost + totalExpenses;
 
           return RefreshIndicator(
             onRefresh: () async {
               await Future.wait([
                 ref.read(vehicleProvider.notifier).reload(),
                 ref.read(fuelEntryProvider.notifier).reload(),
+                ref.read(expenseProvider.notifier).reload(),
+                ref.read(maintenanceProvider.notifier).reload(),
               ]);
             },
             child: ListView(
@@ -202,7 +311,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 22),
-
                 SizedBox(
                   height: 265,
                   child: PageView.builder(
@@ -230,7 +338,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     },
                   ),
                 ),
-
                 if (sortedVehicles.length > 1) ...[
                   const SizedBox(height: 12),
                   Row(
@@ -253,15 +360,51 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     }),
                   ),
                 ],
-
                 const SizedBox(height: 28),
-
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: _SectionTitle(title: 'Schnellzugriff'),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: DashboardQuickActions(
+                    onFuelTap: () {
+                      _openFuelPage(context);
+                    },
+                    onExpenseTap: () {
+                      _openExpensePage(context);
+                    },
+                    onMaintenanceTap: () {
+                      _openMaintenancePage(context, selectedVehicle);
+                    },
+                    onNewEntryTap: () {
+                      _showNewEntrySheet(context, selectedVehicle);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 28),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: _SectionTitle(title: 'Wartungsstatus'),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: DashboardMaintenanceCard(
+                    vehicle: selectedVehicle,
+                    entries: selectedVehicleMaintenanceEntries,
+                    onTap: () {
+                      _openMaintenancePage(context, selectedVehicle);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 28),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20),
                   child: _SectionTitle(title: 'Aktuelle Übersicht'),
                 ),
                 const SizedBox(height: 12),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: GridView.count(
@@ -270,7 +413,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     physics: const NeverScrollableScrollPhysics(),
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
-                    childAspectRatio: 1.25,
+                    childAspectRatio: 1.22,
                     children: [
                       _DashboardStatCard(
                         icon: Icons.speed,
@@ -284,23 +427,29 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         label: 'Ø Verbrauch',
                       ),
                       _DashboardStatCard(
-                        icon: Icons.local_gas_station_outlined,
-                        value: vehicleStatistics.averageFuelPrice <= 0
-                            ? '–'
-                            : _formatDecimal(
-                                vehicleStatistics.averageFuelPrice,
-                                3,
-                              ),
-                        unit: '€/l',
-                        label: 'Ø Kraftstoffpreis',
+                        icon: Icons.euro,
+                        value: _formatDecimal(totalVehicleCosts, 2),
+                        unit: '€',
+                        label: 'Gesamtkosten',
                       ),
                       _DashboardStatCard(
-                        icon: Icons.payments_outlined,
-                        value: vehicleStatistics.costPer100Km <= 0
-                            ? '–'
-                            : _formatDecimal(vehicleStatistics.costPer100Km, 2),
-                        unit: '€/100 km',
-                        label: 'Fahrkosten',
+                        icon: Icons.local_gas_station_outlined,
+                        value: vehicleStatistics.refuels.toString(),
+                        unit: '',
+                        label: 'Tankvorgänge',
+                      ),
+                      _DashboardStatCard(
+                        icon: Icons.receipt_long_outlined,
+                        value: selectedVehicleExpenses.length.toString(),
+                        unit: '',
+                        label: 'Ausgaben',
+                      ),
+                      _DashboardStatCard(
+                        icon: Icons.build_outlined,
+                        value: selectedVehicleMaintenanceEntries.length
+                            .toString(),
+                        unit: '',
+                        label: 'Wartungen',
                       ),
                       _DashboardStatCard(
                         icon: Icons.route,
@@ -308,67 +457,98 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         unit: 'km',
                         label: 'Ausgewertet',
                       ),
-                      _DashboardStatCard(
-                        icon: Icons.euro,
-                        value: _formatDecimal(vehicleStatistics.totalCost, 2),
-                        unit: '€',
-                        label: 'Gesamte Tankkosten',
-                      ),
-                      _DashboardStatCard(
-                        icon: Icons.format_list_numbered,
-                        value: vehicleStatistics.refuels.toString(),
-                        unit: '',
-                        label: 'Tankvorgänge',
-                      ),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 28),
-
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: _SectionTitle(title: 'Letzter Tankvorgang'),
+                  child: _SectionTitle(title: 'Letzte Einträge'),
                 ),
                 const SizedBox(height: 12),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: latestFuelEntry == null
-                      ? const _NoLatestFuelCard()
-                      : _LatestFuelCard(
+                  child: Column(
+                    children: [
+                      if (latestFuelEntry == null)
+                        const _NoLatestFuelCard()
+                      else
+                        _LatestFuelCard(
                           entry: latestFuelEntry,
                           formatDate: _formatDate,
                           formatDecimal: _formatDecimal,
                           onTap: () {
-                            context.go('/fuel');
+                            _openFuelPage(context);
                           },
                         ),
-                ),
-
-                const SizedBox(height: 28),
-
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: _SectionTitle(title: 'Nächste Aufgaben'),
-                ),
-                const SizedBox(height: 12),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _UpcomingTaskCard(
-                    icon: Icons.build_outlined,
-                    title: 'Wartungsplan einrichten',
-                    subtitle:
-                        'Lege Ölwechsel, TÜV und weitere Termine für ${selectedVehicle.name} an.',
-                    actionText: 'Später einrichten',
-                    onTap: () {},
+                      const SizedBox(height: 12),
+                      if (latestExpense == null)
+                        const _NoLatestExpenseCard()
+                      else
+                        _LatestExpenseCard(
+                          expense: latestExpense,
+                          formattedDate: _formatDate(latestExpense.date),
+                          formattedAmount: _formatDecimal(
+                            latestExpense.amount,
+                            2,
+                          ),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (context) {
+                                  return ExpensesPage(
+                                    vehicleId: selectedVehicle.id,
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                    ],
                   ),
                 ),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _NewEntryTile extends StatelessWidget {
+  const _NewEntryTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: colorScheme.surfaceContainerHighest,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        leading: CircleAvatar(
+          backgroundColor: colorScheme.primaryContainer,
+          child: Icon(icon, color: colorScheme.primary),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
       ),
     );
   }
@@ -675,6 +855,78 @@ class _LatestFuelCard extends StatelessWidget {
   }
 }
 
+class _LatestExpenseCard extends StatelessWidget {
+  const _LatestExpenseCard({
+    required this.expense,
+    required this.formattedDate,
+    required this.formattedAmount,
+    required this.onTap,
+  });
+
+  final Expense expense;
+  final String formattedDate;
+  final String formattedAmount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 27,
+                backgroundColor: colorScheme.secondaryContainer,
+                child: Icon(
+                  Icons.receipt_long_outlined,
+                  color: colorScheme.onSecondaryContainer,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      expense.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$formattedDate · ${expense.category}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 9),
+                    Text(
+                      '$formattedAmount €',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NoLatestFuelCard extends StatelessWidget {
   const _NoLatestFuelCard();
 
@@ -689,11 +941,7 @@ class _NoLatestFuelCard extends StatelessWidget {
           children: [
             Icon(Icons.local_gas_station_outlined),
             SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Für dieses Fahrzeug wurde noch kein Tankvorgang gespeichert.',
-              ),
-            ),
+            Expanded(child: Text('Noch kein Tankvorgang gespeichert.')),
           ],
         ),
       ),
@@ -701,52 +949,21 @@ class _NoLatestFuelCard extends StatelessWidget {
   }
 }
 
-class _UpcomingTaskCard extends StatelessWidget {
-  const _UpcomingTaskCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.actionText,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String actionText;
-  final VoidCallback onTap;
+class _NoLatestExpenseCard extends StatelessWidget {
+  const _NoLatestExpenseCard();
 
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: Theme.of(context).colorScheme.secondaryContainer,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
+      child: const Padding(
+        padding: EdgeInsets.all(20),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(child: Icon(icon)),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(subtitle),
-                  const SizedBox(height: 9),
-                  TextButton(onPressed: onTap, child: Text(actionText)),
-                ],
-              ),
-            ),
+            Icon(Icons.receipt_long_outlined),
+            SizedBox(width: 12),
+            Expanded(child: Text('Noch keine Ausgabe gespeichert.')),
           ],
         ),
       ),
