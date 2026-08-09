@@ -11,8 +11,8 @@ class AppDatabase {
 
   static final AppDatabase instance = AppDatabase._();
 
-  static const _databaseName = 'motorlog.db';
-  static const _databaseVersion = 6;
+  static const String _databaseName = 'motorlog.db';
+  static const int _databaseVersion = 6;
 
   Database? _database;
 
@@ -99,20 +99,20 @@ class AppDatabase {
 
   Future<void> _createMaintenanceTable(Database db) async {
     await db.execute('''
-CREATE TABLE maintenance_entries (
-  id TEXT PRIMARY KEY,
-  vehicle_id TEXT NOT NULL,
-  date TEXT NOT NULL,
-  category TEXT NOT NULL,
-  title TEXT NOT NULL,
-  cost REAL NOT NULL,
-  mileage INTEGER NOT NULL,
-  next_mileage INTEGER,
-  next_date TEXT,
-  notes TEXT,
-  FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
-    ON DELETE CASCADE
-)
+      CREATE TABLE maintenance_entries (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        cost REAL NOT NULL,
+        mileage INTEGER NOT NULL,
+        next_mileage INTEGER,
+        next_date TEXT,
+        notes TEXT,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON DELETE CASCADE
+      )
     ''');
   }
 
@@ -143,9 +143,7 @@ CREATE TABLE maintenance_entries (
 
     if (oldVersion < 5) {
       await _createMaintenanceTable(db);
-    }
-
-    if (oldVersion < 6) {
+    } else if (oldVersion < 6) {
       await db.execute(
         'ALTER TABLE maintenance_entries '
         'ADD COLUMN next_mileage INTEGER',
