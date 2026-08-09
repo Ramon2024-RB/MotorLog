@@ -132,13 +132,13 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
   }
 
   Future<void> _selectNextDate() async {
-    final today = DateTime.now();
+    final today = DateUtils.dateOnly(DateTime.now());
 
     final selectedDate = await showDatePicker(
       context: context,
       initialDate:
           _nextDate ?? DateTime(today.year + 1, today.month, today.day),
-      firstDate: DateTime(today.year, today.month, today.day),
+      firstDate: today,
       lastDate: DateTime(today.year + 20, 12, 31),
     );
 
@@ -155,11 +155,13 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     }
 
     if (_selectedVehicleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte ein Fahrzeug auswählen.')),
+      );
       return;
     }
 
     final cost = _parseDecimal(_costController.text);
-
     final mileage = int.tryParse(_mileageController.text.trim());
 
     final nextMileageText = _nextMileageController.text.trim();
@@ -213,6 +215,35 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     return '$day.$month.${date.year}';
   }
 
+  IconData _categoryIcon(String category) {
+    switch (category) {
+      case 'Ölwechsel':
+        return Icons.oil_barrel_outlined;
+      case 'Inspektion':
+        return Icons.fact_check_outlined;
+      case 'Bremsen':
+        return Icons.car_repair;
+      case 'TÜV':
+        return Icons.verified_outlined;
+      case 'Zahnriemen':
+        return Icons.settings_outlined;
+      case 'Luftfilter':
+        return Icons.air_outlined;
+      case 'Innenraumfilter':
+        return Icons.airline_seat_recline_normal;
+      case 'Kraftstofffilter':
+        return Icons.local_gas_station_outlined;
+      case 'Zündkerzen':
+        return Icons.electric_bolt_outlined;
+      case 'Kühlmittel':
+        return Icons.ac_unit_outlined;
+      case 'Getriebeöl':
+        return Icons.settings_suggest_outlined;
+      default:
+        return Icons.build_outlined;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final vehiclesAsync = ref.watch(vehicleProvider);
@@ -225,18 +256,41 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
             onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
             icon: const Icon(Icons.close),
           ),
+          actions: [
+            TextButton(
+              onPressed: _isSaving ? null : _saveMaintenance,
+              child: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Speichern'),
+            ),
+          ],
         ),
         body: vehiclesAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stackTrace) => Center(
-            child: Text(
-              'Fahrzeuge konnten nicht geladen werden.\n$error',
-              textAlign: TextAlign.center,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Fahrzeuge konnten nicht geladen werden.\n$error',
+                textAlign: TextAlign.center,
+              ),
             ),
           ),
           data: (vehicles) {
             if (vehicles.isEmpty) {
-              return const Center(child: Text('Lege zuerst ein Fahrzeug an.'));
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Lege zuerst ein Fahrzeug an.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
             }
 
             _setInitialVehicle(vehicles);
@@ -255,22 +309,8 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                     subtitle: 'Wähle das Fahrzeug für diese Wartung aus.',
                     child: Column(
                       children: [
-                        MotorLogCard(
-                          margin: EdgeInsets.zero,
-                          child: Row(
-                            children: [
-                              const Icon(Icons.directions_car_outlined),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  selectedVehicle.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                        _SelectedMaintenanceVehicleCard(
+                          vehicle: selectedVehicle,
                         ),
                         const SizedBox(height: 14),
                         MotorLogDropdown<String>(
@@ -304,7 +344,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                           MotorLogDropdown<String>(
                             value: _selectedCategory,
                             label: 'Kategorie',
-                            icon: Icons.build_outlined,
+                            icon: _categoryIcon(_selectedCategory),
                             items: _categories.map((category) {
                               return DropdownMenuItem<String>(
                                 value: category,
@@ -327,6 +367,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                             label: 'Bezeichnung',
                             hint: 'Zum Beispiel: Großer Kundendienst',
                             icon: Icons.edit_outlined,
+                            textInputAction: TextInputAction.next,
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
                                 return 'Pflichtfeld';
@@ -345,11 +386,16 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
+                            textInputAction: TextInputAction.next,
                             validator: (value) {
-                              final cost = _parseDecimal(value ?? '');
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Pflichtfeld';
+                              }
+
+                              final cost = _parseDecimal(value);
 
                               if (cost == null || cost < 0) {
-                                return 'Ungültiger Betrag';
+                                return 'Bitte einen gültigen Betrag eingeben';
                               }
 
                               return null;
@@ -370,9 +416,27 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                             onTap: _isSaving ? null : _selectDate,
                             borderRadius: BorderRadius.circular(18),
                             child: InputDecorator(
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Datum',
-                                prefixIcon: Icon(Icons.calendar_today_outlined),
+                                prefixIcon: const Icon(
+                                  Icons.calendar_today_outlined,
+                                ),
+                                filled: true,
+                                fillColor: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerLowest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  borderSide: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outlineVariant,
+                                  ),
+                                ),
                               ),
                               child: Text(_formatDate(_selectedDate)),
                             ),
@@ -385,11 +449,16 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                             suffixText: 'km',
                             icon: Icons.speed,
                             keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next,
                             validator: (value) {
-                              final mileage = int.tryParse(value?.trim() ?? '');
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Pflichtfeld';
+                              }
+
+                              final mileage = int.tryParse(value.trim());
 
                               if (mileage == null || mileage < 0) {
-                                return 'Ungültiger Kilometerstand';
+                                return 'Bitte einen gültigen Kilometerstand eingeben';
                               }
 
                               return null;
@@ -414,6 +483,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                             suffixText: 'km',
                             icon: Icons.notification_add_outlined,
                             keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next,
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
                                 return null;
@@ -422,7 +492,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                               final nextMileage = int.tryParse(value.trim());
 
                               if (nextMileage == null || nextMileage < 0) {
-                                return 'Ungültiger Kilometerstand';
+                                return 'Bitte einen gültigen Kilometerstand eingeben';
                               }
 
                               final currentMileage = int.tryParse(
@@ -446,6 +516,22 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                                 labelText: 'Nächstes Wartungsdatum',
                                 prefixIcon: const Icon(
                                   Icons.event_repeat_outlined,
+                                ),
+                                filled: true,
+                                fillColor: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerLowest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  borderSide: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outlineVariant,
+                                  ),
                                 ),
                                 suffixIcon: _nextDate == null
                                     ? null
@@ -474,6 +560,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                   ),
                   MotorLogSection(
                     title: 'Notizen',
+                    subtitle: 'Zusätzliche Informationen zur Wartung.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: MotorLogTextField(
@@ -502,6 +589,117 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _SelectedMaintenanceVehicleCard extends StatelessWidget {
+  const _SelectedMaintenanceVehicleCard({required this.vehicle});
+
+  final Vehicle vehicle;
+
+  IconData _vehicleIcon() {
+    switch (vehicle.vehicleType.toLowerCase()) {
+      case 'motorrad':
+        return Icons.two_wheeler;
+      case 'camper':
+        return Icons.airport_shuttle;
+      case 'transporter':
+        return Icons.local_shipping_outlined;
+      default:
+        return Icons.directions_car;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return MotorLogCard(
+      margin: EdgeInsets.zero,
+      padding: EdgeInsets.zero,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: colorScheme.primary,
+              child: Icon(
+                _vehicleIcon(),
+                color: colorScheme.onPrimary,
+                size: 30,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    vehicle.name,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('${vehicle.brand} ${vehicle.model}'),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _VehicleInfoChip(
+                        icon: Icons.category_outlined,
+                        label: vehicle.vehicleType,
+                      ),
+                      _VehicleInfoChip(
+                        icon: Icons.local_gas_station_outlined,
+                        label: vehicle.fuelType,
+                      ),
+                      _VehicleInfoChip(
+                        icon: Icons.speed,
+                        label: '${vehicle.mileage} km',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VehicleInfoChip extends StatelessWidget {
+  const _VehicleInfoChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15),
+          const SizedBox(width: 5),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }

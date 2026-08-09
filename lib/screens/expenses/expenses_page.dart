@@ -5,8 +5,8 @@ import '../../models/expense.dart';
 import '../../models/vehicle.dart';
 import '../../services/expense_provider.dart';
 import '../../services/vehicle_provider.dart';
-import 'add_expense_dialog.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
+import 'add_expense_dialog.dart';
 
 class ExpensesPage extends ConsumerWidget {
   const ExpensesPage({super.key, this.vehicleId});
@@ -17,7 +17,7 @@ class ExpensesPage extends ConsumerWidget {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return const AddExpenseDialog();
+        return AddExpenseDialog(initialVehicleId: vehicleId);
       },
     );
   }
@@ -74,53 +74,66 @@ class ExpensesPage extends ConsumerWidget {
         ),
       ),
       body: vehiclesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(
-          child: Text(
-            'Fahrzeuge konnten nicht geladen werden.\n$error',
-            textAlign: TextAlign.center,
-          ),
-        ),
-        data: (vehicles) {
-          return expensesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) => Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 48),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Kosten konnten nicht geladen werden.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(error.toString(), textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: () {
-                        ref.read(expenseProvider.notifier).reload();
-                      },
-                      child: const Text('Erneut versuchen'),
-                    ),
-                  ],
-                ),
+        loading: () {
+          return const Center(child: CircularProgressIndicator());
+        },
+        error: (error, stackTrace) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Fahrzeuge konnten nicht geladen werden.\n$error',
+                textAlign: TextAlign.center,
               ),
             ),
+          );
+        },
+        data: (vehicles) {
+          return expensesAsync.when(
+            loading: () {
+              return const Center(child: CircularProgressIndicator());
+            },
+            error: (error, stackTrace) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Kosten konnten nicht geladen werden.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(error.toString(), textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () {
+                          ref.read(expenseProvider.notifier).reload();
+                        },
+                        child: const Text('Erneut versuchen'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
             data: (expenses) {
               final visibleExpenses = vehicleId == null
                   ? expenses
                   : expenses
                         .where((expense) => expense.vehicleId == vehicleId)
                         .toList();
+
               if (vehicles.isEmpty) {
                 return const Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
                     child: Text(
-                      'Lege zuerst ein Fahrzeug an, bevor du Kosten speicherst.',
+                      'Lege zuerst ein Fahrzeug an, '
+                      'bevor du Kosten speicherst.',
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -129,7 +142,9 @@ class ExpensesPage extends ConsumerWidget {
 
               if (visibleExpenses.isEmpty) {
                 return _EmptyExpensesView(
-                  onAddExpense: () => _openAddDialog(context),
+                  onAddExpense: () {
+                    _openAddDialog(context);
+                  },
                 );
               }
 
@@ -169,7 +184,9 @@ class ExpensesPage extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openAddDialog(context),
+        onPressed: () {
+          _openAddDialog(context);
+        },
         icon: const Icon(Icons.add),
         label: const Text('Ausgabe'),
       ),
@@ -268,7 +285,8 @@ class _ExpenseCard extends StatelessWidget {
                             ),
                         ],
                       ),
-                      if (expense.notes != null) ...[
+                      if (expense.notes != null &&
+                          expense.notes!.trim().isNotEmpty) ...[
                         const SizedBox(height: 12),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,

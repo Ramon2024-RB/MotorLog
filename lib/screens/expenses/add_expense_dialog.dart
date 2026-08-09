@@ -13,9 +13,10 @@ import '../../widgets/motorlog/motorlog_section.dart';
 import '../../widgets/motorlog/motorlog_text_field.dart';
 
 class AddExpenseDialog extends ConsumerStatefulWidget {
-  const AddExpenseDialog({super.key, this.expense});
+  const AddExpenseDialog({super.key, this.expense, this.initialVehicleId});
 
   final Expense? expense;
+  final String? initialVehicleId;
 
   @override
   ConsumerState<AddExpenseDialog> createState() {
@@ -59,7 +60,8 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
 
     final expense = widget.expense;
 
-    _selectedVehicleId = expense?.vehicleId;
+    _selectedVehicleId = expense?.vehicleId ?? widget.initialVehicleId;
+
     _selectedCategory = expense?.category ?? 'Wartung';
     _selectedDate = expense?.date ?? DateTime.now();
 
@@ -150,19 +152,36 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
           : _notesController.text.trim(),
     );
 
-    if (_isEditing) {
-      await ref.read(expenseProvider.notifier).updateExpense(expense);
-    } else {
-      await ref.read(expenseProvider.notifier).addExpense(expense);
-    }
+    try {
+      if (_isEditing) {
+        await ref.read(expenseProvider.notifier).updateExpense(expense);
+      } else {
+        await ref.read(expenseProvider.notifier).addExpense(expense);
+      }
 
-    if (mounted) {
-      Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ausgabe konnte nicht gespeichert werden: $error'),
+        ),
+      );
     }
   }
 
   void _setInitialVehicle(List<Vehicle> vehicles) {
-    if (_selectedVehicleId != null) {
+    if (_selectedVehicleId != null &&
+        vehicles.any((vehicle) => vehicle.id == _selectedVehicleId)) {
       return;
     }
 
@@ -270,7 +289,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                       ],
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Ausgabe',
                     subtitle: 'Kategorie, Bezeichnung und Betrag.',
@@ -299,7 +317,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                                   },
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _titleController,
                             label: 'Bezeichnung',
@@ -315,7 +332,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                             },
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _amountController,
                             label: 'Betrag',
@@ -344,7 +360,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                       ),
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Details',
                     subtitle: 'Datum und optionaler Kilometerstand.',
@@ -382,7 +397,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                             ),
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _mileageController,
                             label: 'Kilometerstand',
@@ -409,7 +423,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                       ),
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Notizen',
                     subtitle: 'Zusätzliche Informationen zur Ausgabe.',
@@ -425,7 +438,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                       ),
                     ),
                   ),
-
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                     child: MotorLogButton(

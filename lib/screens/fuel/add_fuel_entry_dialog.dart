@@ -13,9 +13,10 @@ import '../../widgets/motorlog/motorlog_section.dart';
 import '../../widgets/motorlog/motorlog_text_field.dart';
 
 class AddFuelEntryDialog extends ConsumerStatefulWidget {
-  const AddFuelEntryDialog({super.key, this.entry});
+  const AddFuelEntryDialog({super.key, this.entry, this.initialVehicleId});
 
   final FuelEntry? entry;
+  final String? initialVehicleId;
 
   @override
   ConsumerState<AddFuelEntryDialog> createState() {
@@ -48,7 +49,7 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
 
     final entry = widget.entry;
 
-    _selectedVehicleId = entry?.vehicleId;
+    _selectedVehicleId = entry?.vehicleId ?? widget.initialVehicleId;
     _selectedDate = entry?.date ?? DateTime.now();
     _isFullTank = entry?.isFullTank ?? true;
 
@@ -175,11 +176,8 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
     }
 
     final mileage = int.tryParse(_mileageController.text.trim());
-
     final liters = _parseDecimal(_litersController.text);
-
     final pricePerLiter = _parseDecimal(_pricePerLiterController.text);
-
     final totalPrice = _parseDecimal(_totalPriceController.text);
 
     if (mileage == null ||
@@ -332,7 +330,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                       ],
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Tankdaten',
                     subtitle: 'Kilometerstand, Menge und Kraftstoffpreise.',
@@ -370,7 +367,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                             ),
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _mileageController,
                             label: 'Kilometerstand',
@@ -396,7 +392,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                             },
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _litersController,
                             label: 'Getankte Menge',
@@ -410,7 +405,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                             validator: _validatePositiveDecimal,
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _pricePerLiterController,
                             label: 'Preis pro Liter',
@@ -424,7 +418,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                             validator: _validatePositiveDecimal,
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _totalPriceController,
                             label: 'Gesamtpreis',
@@ -440,7 +433,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                       ),
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Weitere Angaben',
                     subtitle: 'Volltank, Tankstelle und optionale Notizen.',
@@ -467,7 +459,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                             contentPadding: EdgeInsets.zero,
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _stationController,
                             label: 'Tankstelle',
@@ -476,7 +467,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                             textInputAction: TextInputAction.next,
                           ),
                           const SizedBox(height: 16),
-
                           MotorLogTextField(
                             controller: _notesController,
                             label: 'Notizen',
@@ -489,7 +479,6 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                       ),
                     ),
                   ),
-
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                     child: MotorLogButton(

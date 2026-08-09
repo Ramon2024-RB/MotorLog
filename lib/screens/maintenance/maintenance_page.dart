@@ -51,15 +51,11 @@ class MaintenancePage extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
+              onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Abbrechen'),
             ),
             FilledButton.icon(
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
+              onPressed: () => Navigator.of(context).pop(true),
               icon: const Icon(Icons.delete_outline),
               label: const Text('Löschen'),
               style: FilledButton.styleFrom(
@@ -101,14 +97,34 @@ class MaintenancePage extends ConsumerWidget {
           ),
         ),
         data: (vehicles) {
+          if (vehicles.isEmpty) {
+            return const _NoVehicleView();
+          }
+
           return maintenanceAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, stackTrace) => Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Wartungen konnten nicht geladen werden.\n$error',
-                  textAlign: TextAlign.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Wartungen konnten nicht geladen werden.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(error.toString(), textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () {
+                        ref.read(maintenanceProvider.notifier).reload();
+                      },
+                      child: const Text('Erneut versuchen'),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -147,9 +163,7 @@ class MaintenancePage extends ConsumerWidget {
 
               if (visibleEntries.isEmpty) {
                 return _EmptyMaintenanceView(
-                  onAddMaintenance: () {
-                    _openAddDialog(context);
-                  },
+                  onAddMaintenance: () => _openAddDialog(context),
                 );
               }
 
@@ -173,7 +187,6 @@ class MaintenancePage extends ConsumerWidget {
                       direction: DismissDirection.endToStart,
                       confirmDismiss: (_) async {
                         await _confirmDelete(context, ref, entry);
-
                         return false;
                       },
                       background: Container(
@@ -183,18 +196,29 @@ class MaintenancePage extends ConsumerWidget {
                           color: Theme.of(context).colorScheme.error,
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: Icon(
-                          Icons.delete_outline,
-                          size: 30,
-                          color: Theme.of(context).colorScheme.onError,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.delete_outline,
+                              size: 30,
+                              color: Theme.of(context).colorScheme.onError,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Löschen',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onError,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       child: _MaintenanceCard(
                         entry: entry,
                         vehicle: vehicle,
-                        onTap: () {
-                          _openEditDialog(context, entry);
-                        },
+                        onTap: () => _openEditDialog(context, entry),
                       ),
                     );
                   },
@@ -205,9 +229,7 @@ class MaintenancePage extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          _openAddDialog(context);
-        },
+        onPressed: () => _openAddDialog(context),
         icon: const Icon(Icons.add),
         label: const Text('Wartung'),
       ),
@@ -221,13 +243,11 @@ class MaintenanceStatus {
   const MaintenanceStatus({
     required this.type,
     required this.label,
-    required this.description,
     required this.priority,
   });
 
   final MaintenanceStatusType type;
   final String label;
-  final String description;
   final int priority;
 
   static MaintenanceStatus calculate({
@@ -236,10 +256,9 @@ class MaintenanceStatus {
   }) {
     final today = DateUtils.dateOnly(DateTime.now());
 
-    final nextDate = switch (entry.nextDate) {
-      final date? => DateUtils.dateOnly(date),
-      null => null,
-    };
+    final nextDate = entry.nextDate == null
+        ? null
+        : DateUtils.dateOnly(entry.nextDate!);
 
     final currentMileage = vehicle?.mileage;
     final nextMileage = entry.nextMileage;
@@ -255,7 +274,6 @@ class MaintenanceStatus {
       return const MaintenanceStatus(
         type: MaintenanceStatusType.overdue,
         label: 'Überfällig',
-        description: 'Die Wartung ist fällig oder bereits überschritten.',
         priority: 0,
       );
     }
@@ -275,7 +293,6 @@ class MaintenanceStatus {
       return const MaintenanceStatus(
         type: MaintenanceStatusType.dueSoon,
         label: 'Bald fällig',
-        description: 'Die Wartung steht in Kürze an.',
         priority: 1,
       );
     }
@@ -283,8 +300,7 @@ class MaintenanceStatus {
     if (nextDate != null || nextMileage != null) {
       return const MaintenanceStatus(
         type: MaintenanceStatusType.okay,
-        label: 'Alles in Ordnung',
-        description: 'Die nächste Wartung ist noch nicht fällig.',
+        label: 'In Ordnung',
         priority: 2,
       );
     }
@@ -292,7 +308,6 @@ class MaintenanceStatus {
     return const MaintenanceStatus(
       type: MaintenanceStatusType.noReminder,
       label: 'Keine Erinnerung',
-      description: 'Für diese Wartung wurde kein Intervall festgelegt.',
       priority: 3,
     );
   }
@@ -312,7 +327,6 @@ class _MaintenanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
     final status = MaintenanceStatus.calculate(entry: entry, vehicle: vehicle);
 
     final statusColor = _statusColor(context, status.type);
@@ -329,7 +343,7 @@ class _MaintenanceCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                radius: 28,
+                radius: 27,
                 backgroundColor: colorScheme.primaryContainer,
                 child: Icon(
                   _categoryIcon(entry.category),
@@ -341,48 +355,12 @@ class _MaintenanceCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            entry.title,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _statusIcon(status.type),
-                                size: 14,
-                                color: statusColor,
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                status.label,
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    Text(
+                      entry.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -390,9 +368,39 @@ class _MaintenanceCard extends StatelessWidget {
                       '${_formatDate(entry.date)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _statusIcon(status.type),
+                            size: 14,
+                            color: statusColor,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            status.label,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Wrap(
-                      spacing: 8,
+                      spacing: 10,
                       runSpacing: 8,
                       children: [
                         _MaintenanceValue(
@@ -460,7 +468,8 @@ class _MaintenanceCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (entry.notes != null && entry.notes!.isNotEmpty) ...[
+                    if (entry.notes != null &&
+                        entry.notes!.trim().isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,10 +480,26 @@ class _MaintenanceCard extends StatelessWidget {
                         ],
                       ),
                     ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.touch_app_outlined,
+                          size: 16,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Antippen zum Bearbeiten',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               const Icon(Icons.chevron_right),
             ],
           ),
@@ -673,6 +698,23 @@ class _EmptyMaintenanceView extends StatelessWidget {
               label: const Text('Wartung hinzufügen'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoVehicleView extends StatelessWidget {
+  const _NoVehicleView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Text(
+          'Lege zuerst ein Fahrzeug an, bevor du eine Wartung speicherst.',
+          textAlign: TextAlign.center,
         ),
       ),
     );

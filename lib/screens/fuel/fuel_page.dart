@@ -15,7 +15,7 @@ class FuelPage extends ConsumerWidget {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return const AddFuelEntryDialog();
+        return AddFuelEntryDialog(initialVehicleId: vehicleId);
       },
     );
   }
