@@ -102,7 +102,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 
   void _openExpenses(Vehicle vehicle) {
-    context.go('/expenses');
+    context.go(
+      Uri(
+        path: '/expenses',
+        queryParameters: {'vehicleId': vehicle.id},
+      ).toString(),
+    );
   }
 
   void _openMaintenance(Vehicle vehicle) {

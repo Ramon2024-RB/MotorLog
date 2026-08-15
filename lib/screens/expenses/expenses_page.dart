@@ -8,16 +8,38 @@ import '../../services/vehicle_provider.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
 import 'add_expense_dialog.dart';
 
-class ExpensesPage extends ConsumerWidget {
+class ExpensesPage extends ConsumerStatefulWidget {
   const ExpensesPage({super.key, this.vehicleId});
 
   final String? vehicleId;
+
+  @override
+  ConsumerState<ExpensesPage> createState() => _ExpensesPageState();
+}
+
+class _ExpensesPageState extends ConsumerState<ExpensesPage> {
+  String? _selectedVehicleId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedVehicleId = widget.vehicleId;
+  }
+
+  @override
+  void didUpdateWidget(covariant ExpensesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.vehicleId != widget.vehicleId) {
+      _selectedVehicleId = widget.vehicleId;
+    }
+  }
 
   Future<void> _openAddDialog(BuildContext context) async {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AddExpenseDialog(initialVehicleId: vehicleId);
+        return AddExpenseDialog(initialVehicleId: _selectedVehicleId);
       },
     );
   }
@@ -62,7 +84,7 @@ class ExpensesPage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final expensesAsync = ref.watch(expenseProvider);
     final vehiclesAsync = ref.watch(vehicleProvider);
 
@@ -89,6 +111,10 @@ class ExpensesPage extends ConsumerWidget {
           );
         },
         data: (vehicles) {
+          if (vehicles.isEmpty) {
+            return const _NoVehicleView();
+          }
+
           return expensesAsync.when(
             loading: () {
               return const Center(child: CircularProgressIndicator());
@@ -121,63 +147,98 @@ class ExpensesPage extends ConsumerWidget {
               );
             },
             data: (expenses) {
-              final visibleExpenses = vehicleId == null
-                  ? expenses
+              final visibleExpenses = _selectedVehicleId == null
+                  ? [...expenses]
                   : expenses
-                        .where((expense) => expense.vehicleId == vehicleId)
+                        .where(
+                          (expense) => expense.vehicleId == _selectedVehicleId,
+                        )
                         .toList();
 
-              if (vehicles.isEmpty) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text(
-                      'Lege zuerst ein Fahrzeug an, '
-                      'bevor du Kosten speicherst.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              }
-
-              if (visibleExpenses.isEmpty) {
-                return _EmptyExpensesView(
-                  onAddExpense: () {
-                    _openAddDialog(context);
-                  },
-                );
-              }
+              visibleExpenses.sort(
+                (first, second) => second.date.compareTo(first.date),
+              );
 
               final vehicleMap = {
                 for (final vehicle in vehicles) vehicle.id: vehicle,
               };
 
-              return RefreshIndicator(
-                onRefresh: () {
-                  return ref.read(expenseProvider.notifier).reload();
-                },
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                  itemCount: visibleExpenses.length,
-                  separatorBuilder: (context, index) {
-                    return const SizedBox(height: 12);
-                  },
-                  itemBuilder: (context, index) {
-                    final expense = visibleExpenses[index];
-                    final vehicle = vehicleMap[expense.vehicleId];
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: _selectedVehicleId,
+                      decoration: const InputDecoration(
+                        labelText: 'Fahrzeug',
+                        prefixIcon: Icon(Icons.directions_car_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Alle Fahrzeuge'),
+                        ),
+                        ...vehicles.map((vehicle) {
+                          return DropdownMenuItem<String?>(
+                            value: vehicle.id,
+                            child: Text(vehicle.name),
+                          );
+                        }),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedVehicleId = value;
+                        });
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: visibleExpenses.isEmpty
+                        ? _EmptyExpensesView(
+                            selectedVehicleId: _selectedVehicleId,
+                            onAddExpense: () {
+                              _openAddDialog(context);
+                            },
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () {
+                              return ref
+                                  .read(expenseProvider.notifier)
+                                  .reload();
+                            },
+                            child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                8,
+                                20,
+                                100,
+                              ),
+                              itemCount: visibleExpenses.length,
+                              separatorBuilder: (context, index) {
+                                return const SizedBox(height: 12);
+                              },
+                              itemBuilder: (context, index) {
+                                final expense = visibleExpenses[index];
 
-                    return _ExpenseCard(
-                      expense: expense,
-                      vehicle: vehicle,
-                      onEdit: () {
-                        _openEditDialog(context, expense);
-                      },
-                      onDelete: () {
-                        _confirmDelete(context, ref, expense);
-                      },
-                    );
-                  },
-                ),
+                                final vehicle = vehicleMap[expense.vehicleId];
+
+                                return _ExpenseCard(
+                                  expense: expense,
+                                  vehicle: vehicle,
+                                  onEdit: () {
+                                    _openEditDialog(context, expense);
+                                  },
+                                  onDelete: () {
+                                    _confirmDelete(context, ref, expense);
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                  ),
+                ],
               );
             },
           );
@@ -226,7 +287,20 @@ class _ExpenseCard extends StatelessWidget {
           color: colorScheme.error,
           borderRadius: BorderRadius.circular(24),
         ),
-        child: Icon(Icons.delete_outline, color: colorScheme.onError, size: 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.delete_outline, color: colorScheme.onError, size: 30),
+            const SizedBox(height: 4),
+            Text(
+              'Löschen',
+              style: TextStyle(
+                color: colorScheme.onError,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
       ),
       child: MotorLogCard(
         margin: EdgeInsets.zero,
@@ -392,14 +466,18 @@ class _ExpenseValue extends StatelessWidget {
 }
 
 class _EmptyExpensesView extends StatelessWidget {
-  const _EmptyExpensesView({required this.onAddExpense});
+  const _EmptyExpensesView({
+    required this.selectedVehicleId,
+    required this.onAddExpense,
+  });
 
+  final String? selectedVehicleId;
   final VoidCallback onAddExpense;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -411,14 +489,19 @@ class _EmptyExpensesView extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'Noch keine Kosten',
+              selectedVehicleId == null
+                  ? 'Noch keine Kosten'
+                  : 'Keine Kosten für dieses Fahrzeug',
+              textAlign: TextAlign.center,
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Erfasse deine erste Ausgabe.',
+            Text(
+              selectedVehicleId == null
+                  ? 'Erfasse deine erste Ausgabe.'
+                  : 'Für das ausgewählte Fahrzeug wurde noch keine Ausgabe gespeichert.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -428,6 +511,23 @@ class _EmptyExpensesView extends StatelessWidget {
               label: const Text('Ausgabe hinzufügen'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoVehicleView extends StatelessWidget {
+  const _NoVehicleView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Text(
+          'Lege zuerst ein Fahrzeug an, bevor du Kosten speicherst.',
+          textAlign: TextAlign.center,
         ),
       ),
     );

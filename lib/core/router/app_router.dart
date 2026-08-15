@@ -58,7 +58,9 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: '/expenses',
               builder: (context, state) {
-                return const ExpensesPage();
+                final vehicleId = state.uri.queryParameters['vehicleId'];
+
+                return ExpensesPage(vehicleId: vehicleId);
               },
             ),
           ],
