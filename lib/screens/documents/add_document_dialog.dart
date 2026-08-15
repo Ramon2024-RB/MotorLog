@@ -1,5 +1,7 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/vehicle.dart';
@@ -26,6 +28,7 @@ class AddDocumentDialog extends ConsumerStatefulWidget {
 
 class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
   final _formKey = GlobalKey<FormState>();
+  final ImagePicker _imagePicker = ImagePicker();
 
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
@@ -36,6 +39,7 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
   String? _filePath;
 
   bool _isSaving = false;
+  bool _isSelectingFile = false;
 
   bool get _isEditing => widget.document != null;
 
@@ -59,7 +63,6 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
     final document = widget.document;
 
     _selectedVehicleId = document?.vehicleId ?? widget.initialVehicleId;
-
     _selectedCategory = document?.category ?? 'Rechnung';
     _selectedDate = document?.date ?? DateTime.now();
     _filePath = document?.filePath;
@@ -109,6 +112,155 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       setState(() {
         _selectedDate = selectedDate;
       });
+    }
+  }
+
+  Future<void> _showFileSourcePicker() async {
+    if (_isSaving || _isSelectingFile) {
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (bottomSheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.camera_alt_outlined),
+                  ),
+                  title: const Text('Foto aufnehmen'),
+                  subtitle: const Text('Dokument mit der Kamera fotografieren'),
+                  onTap: () {
+                    Navigator.of(bottomSheetContext).pop();
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.photo_library_outlined),
+                  ),
+                  title: const Text('Foto auswählen'),
+                  subtitle: const Text('Bild aus der Fotomediathek verwenden'),
+                  onTap: () {
+                    Navigator.of(bottomSheetContext).pop();
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.folder_open_outlined),
+                  ),
+                  title: const Text('Datei auswählen'),
+                  subtitle: const Text('PDF, Bild oder andere Datei auswählen'),
+                  onTap: () {
+                    Navigator.of(bottomSheetContext).pop();
+                    _pickFile();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    if (_isSelectingFile) {
+      return;
+    }
+
+    setState(() {
+      _isSelectingFile = true;
+    });
+
+    try {
+      final image = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 90,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      if (image != null) {
+        setState(() {
+          _filePath = image.path;
+        });
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Foto konnte nicht ausgewählt werden: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSelectingFile = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickFile() async {
+    if (_isSelectingFile) {
+      return;
+    }
+
+    setState(() {
+      _isSelectingFile = true;
+    });
+
+    try {
+      final file = await FilePicker.pickFile();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (file != null) {
+        final path = file.path;
+
+        if (path == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Die ausgewählte Datei besitzt keinen lokalen Dateipfad.',
+              ),
+            ),
+          );
+
+          return;
+        }
+
+        setState(() {
+          _filePath = path;
+        });
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Datei konnte nicht ausgewählt werden: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSelectingFile = false;
+        });
+      }
     }
   }
 
@@ -209,6 +361,16 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
     }
 
     return parts.last;
+  }
+
+  bool _isImageFile(String path) {
+    final lowerPath = path.toLowerCase();
+
+    return lowerPath.endsWith('.jpg') ||
+        lowerPath.endsWith('.jpeg') ||
+        lowerPath.endsWith('.png') ||
+        lowerPath.endsWith('.heic') ||
+        lowerPath.endsWith('.webp');
   }
 
   @override
@@ -313,7 +475,6 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                       ],
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Dokument',
                     subtitle: 'Kategorie und Bezeichnung des Dokuments.',
@@ -362,7 +523,6 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                       ),
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Datum',
                     subtitle: 'Wann wurde das Dokument ausgestellt?',
@@ -399,26 +559,23 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                       ),
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Datei',
-                    subtitle: 'Hinterlege später ein Foto oder eine Datei.',
+                    subtitle:
+                        'Füge ein Foto, einen Scan oder eine Datei hinzu.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: _filePath == null
                           ? _EmptyFileView(
-                              onAddFile: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Die Datei- und Fotoauswahl bauen wir im nächsten Schritt ein.',
-                                    ),
-                                  ),
-                                );
-                              },
+                              isLoading: _isSelectingFile,
+                              onAddFile: _showFileSourcePicker,
                             )
                           : _SelectedFileView(
                               fileName: _fileName(_filePath!),
+                              isImage: _isImageFile(_filePath!),
+                              onReplace: _isSaving
+                                  ? null
+                                  : _showFileSourcePicker,
                               onRemove: _isSaving
                                   ? null
                                   : () {
@@ -429,7 +586,6 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                             ),
                     ),
                   ),
-
                   MotorLogSection(
                     title: 'Notizen',
                     subtitle: 'Zusätzliche Informationen zum Dokument.',
@@ -445,7 +601,6 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                       ),
                     ),
                   ),
-
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                     child: MotorLogButton(
@@ -579,9 +734,10 @@ class _VehicleInfoChip extends StatelessWidget {
 }
 
 class _EmptyFileView extends StatelessWidget {
-  const _EmptyFileView({required this.onAddFile});
+  const _EmptyFileView({required this.onAddFile, required this.isLoading});
 
   final VoidCallback onAddFile;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -597,15 +753,23 @@ class _EmptyFileView extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          'Du kannst dem Dokument später ein Foto oder eine Datei hinzufügen.',
+          'Fotografiere ein Dokument, wähle ein Bild oder füge eine Datei hinzu.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
-          onPressed: onAddFile,
-          icon: const Icon(Icons.add_photo_alternate_outlined),
-          label: const Text('Datei oder Foto hinzufügen'),
+          onPressed: isLoading ? null : onAddFile,
+          icon: isLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.add_photo_alternate_outlined),
+          label: Text(
+            isLoading ? 'Wird geöffnet...' : 'Datei oder Foto hinzufügen',
+          ),
         ),
       ],
     );
@@ -613,45 +777,68 @@ class _EmptyFileView extends StatelessWidget {
 }
 
 class _SelectedFileView extends StatelessWidget {
-  const _SelectedFileView({required this.fileName, required this.onRemove});
+  const _SelectedFileView({
+    required this.fileName,
+    required this.isImage,
+    required this.onReplace,
+    required this.onRemove,
+  });
 
   final String fileName;
+  final bool isImage;
+  final VoidCallback? onReplace;
   final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Row(
+    return Column(
       children: [
-        CircleAvatar(
-          radius: 25,
-          backgroundColor: colorScheme.primaryContainer,
-          child: Icon(Icons.description_outlined, color: colorScheme.primary),
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 25,
+              backgroundColor: colorScheme.primaryContainer,
+              child: Icon(
+                isImage ? Icons.image_outlined : Icons.description_outlined,
+                color: colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isImage ? 'Foto hinterlegt' : 'Datei hinterlegt',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    fileName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Datei entfernen',
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Datei hinterlegt',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                fileName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onReplace,
+            icon: const Icon(Icons.swap_horiz),
+            label: const Text('Datei ersetzen'),
           ),
-        ),
-        IconButton(
-          tooltip: 'Datei entfernen',
-          onPressed: onRemove,
-          icon: const Icon(Icons.delete_outline),
         ),
       ],
     );

@@ -119,13 +119,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 
   void _openDocuments(Vehicle vehicle) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Dokumente für „${vehicle.name}“ bauen wir als Nächstes ein.',
-        ),
-      ),
-    );
+    context.go('/documents/${vehicle.id}');
   }
 
   @override
@@ -304,7 +298,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ],
 
                 const SizedBox(height: 30),
+
                 const _SectionTitle(title: 'Schnellzugriff'),
+
                 const SizedBox(height: 12),
 
                 Row(
@@ -364,7 +360,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ),
 
                 const SizedBox(height: 30),
+
                 const _SectionTitle(title: 'Übersicht'),
+
                 const SizedBox(height: 12),
 
                 _StatRow(
@@ -413,7 +411,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ),
 
                 const SizedBox(height: 30),
+
                 const _SectionTitle(title: 'Letzte Einträge'),
+
                 const SizedBox(height: 12),
 
                 if (latestFuel != null)
