@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/vehicle_document.dart';
 import '../../services/document_provider.dart';
@@ -20,16 +21,8 @@ class DocumentsPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _openEditDialog(
-    BuildContext context,
-    VehicleDocument document,
-  ) async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AddDocumentDialog(document: document);
-      },
-    );
+  void _openDocument(BuildContext context, VehicleDocument document) {
+    context.go('/documents/$vehicleId/${document.id}');
   }
 
   Future<void> _confirmDelete(
@@ -147,14 +140,18 @@ class DocumentsPage extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
               children: [
                 _DocumentOverviewCard(documents: documents),
+
                 const SizedBox(height: 24),
+
                 Text(
                   'Gespeicherte Dokumente',
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
+
                 const SizedBox(height: 12),
+
                 ...documents.map((document) {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -162,7 +159,7 @@ class DocumentsPage extends ConsumerWidget {
                       document: document,
                       formattedDate: _formatDate(document.date),
                       onTap: () {
-                        _openEditDialog(context, document);
+                        _openDocument(context, document);
                       },
                       onDelete: () {
                         _confirmDelete(context, ref, document);
@@ -246,7 +243,9 @@ class _DocumentOverviewCard extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 20),
+
             Row(
               children: [
                 Expanded(
@@ -328,22 +327,31 @@ class _DocumentCard extends StatelessWidget {
     switch (document.category) {
       case 'Rechnung':
         return Icons.receipt_long_outlined;
+
       case 'TÜV':
         return Icons.verified_outlined;
+
       case 'Versicherung':
         return Icons.shield_outlined;
+
       case 'Fahrzeugschein':
         return Icons.badge_outlined;
+
       case 'Kaufvertrag':
         return Icons.handshake_outlined;
+
       case 'Werkstatt':
         return Icons.build_outlined;
+
       case 'Garantie':
         return Icons.workspace_premium_outlined;
+
       case 'Steuer':
         return Icons.account_balance_outlined;
+
       case 'Zulassung':
         return Icons.directions_car_outlined;
+
       default:
         return Icons.description_outlined;
     }
@@ -406,7 +414,9 @@ class _DocumentCard extends StatelessWidget {
                       backgroundColor: colorScheme.primaryContainer,
                       child: Icon(_categoryIcon(), color: colorScheme.primary),
                     ),
+
                     const SizedBox(width: 14),
+
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -428,11 +438,15 @@ class _DocumentCard extends StatelessWidget {
                         ],
                       ),
                     ),
+
                     const SizedBox(width: 6),
+
                     const Icon(Icons.chevron_right),
                   ],
                 ),
+
                 const SizedBox(height: 16),
+
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -449,9 +463,11 @@ class _DocumentCard extends StatelessWidget {
                     ),
                   ],
                 ),
+
                 if (document.notes != null &&
                     document.notes!.trim().isNotEmpty) ...[
                   const SizedBox(height: 14),
+
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -467,17 +483,19 @@ class _DocumentCard extends StatelessWidget {
                     ],
                   ),
                 ],
+
                 const SizedBox(height: 12),
+
                 Row(
                   children: [
                     Icon(
-                      Icons.touch_app_outlined,
+                      Icons.visibility_outlined,
                       size: 16,
                       color: colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Antippen zum Bearbeiten',
+                      'Antippen für Details',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),

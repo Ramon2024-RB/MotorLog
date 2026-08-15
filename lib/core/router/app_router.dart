@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../screens/app_shell.dart';
 import '../../screens/dashboard/dashboard_page.dart';
+import '../../screens/documents/document_detail_page.dart';
 import '../../screens/documents/documents_page.dart';
 import '../../screens/expenses/expenses_page.dart';
 import '../../screens/fuel/fuel_page.dart';
@@ -50,6 +51,16 @@ final GoRouter appRouter = GoRouter(
 
                     return DocumentsPage(vehicleId: vehicleId);
                   },
+                  routes: [
+                    GoRoute(
+                      path: ':documentId',
+                      builder: (context, state) {
+                        final documentId = state.pathParameters['documentId']!;
+
+                        return DocumentDetailPage(documentId: documentId);
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
