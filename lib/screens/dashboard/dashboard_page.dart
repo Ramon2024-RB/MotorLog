@@ -114,6 +114,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     context.go('/maintenance/${vehicle.id}');
   }
 
+  void _openTires(Vehicle vehicle) {
+    context.go('/tires/${vehicle.id}');
+  }
+
+  void _openDocuments(Vehicle vehicle) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Dokumente für „${vehicle.name}“ bauen wir als Nächstes ein.',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final vehiclesAsync = ref.watch(vehicleProvider);
@@ -293,13 +307,31 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 const _SectionTitle(title: 'Schnellzugriff'),
                 const SizedBox(height: 12),
 
-                _PrimaryActionCard(
-                  icon: Icons.local_gas_station_outlined,
-                  title: 'Tanken',
-                  subtitle: 'Neuen Tankvorgang erfassen',
-                  onTap: () {
-                    _openFuel(selectedVehicle);
-                  },
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: Icons.local_gas_station_outlined,
+                        title: 'Tanken',
+                        subtitle: 'Tankvorgang erfassen',
+                        onTap: () {
+                          _openFuel(selectedVehicle);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: Icons.build_outlined,
+                        title: 'Wartung',
+                        subtitle: 'Wartung erfassen',
+                        onTap: () {
+                          _openMaintenance(selectedVehicle);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 12),
@@ -308,23 +340,23 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: _SmallActionCard(
-                        icon: Icons.receipt_long_outlined,
-                        title: 'Ausgabe',
-                        subtitle: 'Kosten hinzufügen',
+                      child: _QuickActionCard(
+                        icon: Icons.tire_repair,
+                        title: 'Reifen',
+                        subtitle: 'Reifensätze verwalten',
                         onTap: () {
-                          _openExpenses(selectedVehicle);
+                          _openTires(selectedVehicle);
                         },
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _SmallActionCard(
-                        icon: Icons.build_outlined,
-                        title: 'Wartung',
-                        subtitle: 'Wartung erfassen',
+                      child: _QuickActionCard(
+                        icon: Icons.description_outlined,
+                        title: 'Dokumente',
+                        subtitle: 'Unterlagen verwalten',
                         onTap: () {
-                          _openMaintenance(selectedVehicle);
+                          _openDocuments(selectedVehicle);
                         },
                       ),
                     ),
@@ -513,68 +545,8 @@ class _VehicleCard extends StatelessWidget {
   }
 }
 
-class _PrimaryActionCard extends StatelessWidget {
-  const _PrimaryActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: colors.primaryContainer,
-                child: Icon(icon, color: colors.primary),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(subtitle),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SmallActionCard extends StatelessWidget {
-  const _SmallActionCard({
+class _QuickActionCard extends StatelessWidget {
+  const _QuickActionCard({
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -600,30 +572,35 @@ class _SmallActionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         child: Padding(
           padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: colors.primaryContainer,
-                child: Icon(icon, color: colors.primary),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+          child: SizedBox(
+            height: 112,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: colors.primaryContainer,
+                  child: Icon(icon, color: colors.primary),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+                const Spacer(),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
         ),
       ),
