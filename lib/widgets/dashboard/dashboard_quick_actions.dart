@@ -6,49 +6,104 @@ class DashboardQuickActions extends StatelessWidget {
     required this.onFuelTap,
     required this.onExpenseTap,
     required this.onMaintenanceTap,
-    required this.onNewEntryTap,
   });
 
   final VoidCallback onFuelTap;
   final VoidCallback onExpenseTap;
   final VoidCallback onMaintenanceTap;
-  final VoidCallback onNewEntryTap;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.55,
+    return Column(
       children: [
-        _QuickActionCard(
-          icon: Icons.local_gas_station_outlined,
-          title: 'Tanken',
-          subtitle: 'Tankvorgang erfassen',
-          onTap: onFuelTap,
-        ),
-        _QuickActionCard(
-          icon: Icons.receipt_long_outlined,
-          title: 'Ausgabe',
-          subtitle: 'Kosten hinzufügen',
-          onTap: onExpenseTap,
-        ),
-        _QuickActionCard(
-          icon: Icons.build_outlined,
-          title: 'Wartung',
-          subtitle: 'Wartung erfassen',
-          onTap: onMaintenanceTap,
-        ),
-        _QuickActionCard(
-          icon: Icons.add_circle_outline,
-          title: 'Neu',
-          subtitle: 'Eintrag auswählen',
-          onTap: onNewEntryTap,
+        _FuelQuickActionCard(onTap: onFuelTap),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _QuickActionCard(
+                icon: Icons.receipt_long_outlined,
+                title: 'Ausgabe',
+                subtitle: 'Kosten hinzufügen',
+                onTap: onExpenseTap,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _QuickActionCard(
+                icon: Icons.build_outlined,
+                title: 'Wartung',
+                subtitle: 'Wartung erfassen',
+                onTap: onMaintenanceTap,
+              ),
+            ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+class _FuelQuickActionCard extends StatelessWidget {
+  const _FuelQuickActionCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: colorScheme.primary,
+                child: Icon(
+                  Icons.local_gas_station,
+                  size: 29,
+                  color: colorScheme.onPrimary,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tanken',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Neuen Tankvorgang erfassen',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.add_circle_outline,
+                color: colorScheme.primary,
+                size: 28,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -72,47 +127,36 @@ class _QuickActionCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(22),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                radius: 23,
+                radius: 22,
                 backgroundColor: colorScheme.primaryContainer,
-                child: Icon(
-                  icon,
-                  color: colorScheme.primary,
+                child: Icon(icon, color: colorScheme.primary),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),

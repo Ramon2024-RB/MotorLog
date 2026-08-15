@@ -4,7 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 
 void main() {
-  runApp(const ProviderScope(child: MotorLogApp()));
+  runApp(
+    const ProviderScope(
+      child: MotorLogApp(),
+    ),
+  );
 }
 
 class MotorLogApp extends StatelessWidget {
@@ -17,7 +21,9 @@ class MotorLogApp extends StatelessWidget {
       title: 'MotorLog',
       routerConfig: appRouter,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF176B5B)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF176B5B),
+        ),
         useMaterial3: true,
       ),
     );
