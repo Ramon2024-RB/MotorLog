@@ -1,21 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../models/fuel_entry.dart';
 import '../../models/vehicle.dart';
 import '../../services/fuel_entry_provider.dart';
 import '../../services/vehicle_provider.dart';
 import 'add_fuel_entry_dialog.dart';
 
-class FuelPage extends ConsumerWidget {
+class FuelPage extends ConsumerStatefulWidget {
   const FuelPage({super.key, this.vehicleId});
 
   final String? vehicleId;
+
+  @override
+  ConsumerState<FuelPage> createState() => _FuelPageState();
+}
+
+class _FuelPageState extends ConsumerState<FuelPage> {
+  String? _selectedVehicleId;
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (!_initialized) {
+      _selectedVehicleId = widget.vehicleId;
+      _initialized = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant FuelPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.vehicleId != widget.vehicleId) {
+      setState(() {
+        _selectedVehicleId = widget.vehicleId;
+      });
+    }
+  }
 
   Future<void> _openAddDialog(BuildContext context) async {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AddFuelEntryDialog(initialVehicleId: vehicleId);
+        return AddFuelEntryDialog(initialVehicleId: _selectedVehicleId);
       },
     );
   }
@@ -38,18 +68,25 @@ class FuelPage extends ConsumerWidget {
       context: context,
       builder: (context) {
         return AlertDialog(
+          icon: const Icon(Icons.delete_outline),
           title: const Text('Tankvorgang löschen?'),
           content: const Text(
-            'Möchtest du diesen Tankvorgang wirklich löschen?',
+            'Möchtest du diesen Tankvorgang wirklich löschen?\n\n'
+            'Diese Aktion kann nicht rückgängig gemacht werden.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Abbrechen'),
             ),
-            FilledButton(
+            FilledButton.icon(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Löschen'),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Löschen'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+              ),
             ),
           ],
         );
@@ -61,8 +98,21 @@ class FuelPage extends ConsumerWidget {
     }
   }
 
+  String _vehicleLabel(Vehicle vehicle) {
+    final details = [
+      vehicle.brand,
+      vehicle.model,
+    ].where((value) => value.trim().isNotEmpty).join(' ');
+
+    if (details.isEmpty) {
+      return vehicle.name;
+    }
+
+    return '${vehicle.name} · $details';
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final entriesAsync = ref.watch(fuelEntryProvider);
     final vehiclesAsync = ref.watch(vehicleProvider);
 
@@ -74,87 +124,169 @@ class FuelPage extends ConsumerWidget {
         ),
       ),
       body: vehiclesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(
-          child: Text(
-            'Fahrzeuge konnten nicht geladen werden.\n$error',
-            textAlign: TextAlign.center,
-          ),
-        ),
-        data: (vehicles) {
-          return entriesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) => Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 48),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Tankvorgänge konnten nicht geladen werden.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(error.toString(), textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: () {
-                        ref.read(fuelEntryProvider.notifier).reload();
-                      },
-                      child: const Text('Erneut versuchen'),
-                    ),
-                  ],
-                ),
+        loading: () {
+          return const Center(child: CircularProgressIndicator());
+        },
+        error: (error, stackTrace) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Fahrzeuge konnten nicht geladen werden.\n$error',
+                textAlign: TextAlign.center,
               ),
             ),
+          );
+        },
+        data: (vehicles) {
+          if (vehicles.isEmpty) {
+            return const _NoVehicleView();
+          }
+
+          return entriesAsync.when(
+            loading: () {
+              return const Center(child: CircularProgressIndicator());
+            },
+            error: (error, stackTrace) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Tankvorgänge konnten nicht geladen werden.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(error.toString(), textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () {
+                          ref.read(fuelEntryProvider.notifier).reload();
+                        },
+                        child: const Text('Erneut versuchen'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
             data: (entries) {
-              final visibleEntries = vehicleId == null
-                  ? entries
+              final sortedVehicles = [...vehicles]
+                ..sort((a, b) {
+                  if (a.isDefault && !b.isDefault) {
+                    return -1;
+                  }
+
+                  if (!a.isDefault && b.isDefault) {
+                    return 1;
+                  }
+
+                  return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+                });
+
+              final selectedVehicleStillExists =
+                  _selectedVehicleId == null ||
+                  sortedVehicles.any(
+                    (vehicle) => vehicle.id == _selectedVehicleId,
+                  );
+
+              final activeVehicleId = selectedVehicleStillExists
+                  ? _selectedVehicleId
+                  : null;
+
+              final visibleEntries = activeVehicleId == null
+                  ? [...entries]
                   : entries
-                        .where((entry) => entry.vehicleId == vehicleId)
+                        .where((entry) => entry.vehicleId == activeVehicleId)
                         .toList();
 
-              if (vehicles.isEmpty) {
-                return _NoVehicleView(onAddVehicle: () {});
-              }
-
-              if (visibleEntries.isEmpty) {
-                return _EmptyFuelView(
-                  onAddFuelEntry: () => _openAddDialog(context),
-                );
-              }
+              visibleEntries.sort((a, b) => b.date.compareTo(a.date));
 
               final vehicleMap = {
                 for (final vehicle in vehicles) vehicle.id: vehicle,
               };
 
               return RefreshIndicator(
-                onRefresh: () {
-                  return ref.read(fuelEntryProvider.notifier).reload();
+                onRefresh: () async {
+                  await Future.wait([
+                    ref.read(fuelEntryProvider.notifier).reload(),
+                    ref.read(vehicleProvider.notifier).reload(),
+                  ]);
                 },
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                  itemCount: visibleEntries.length,
-                  separatorBuilder: (context, index) {
-                    return const SizedBox(height: 12);
-                  },
-                  itemBuilder: (context, index) {
-                    final entry = visibleEntries[index];
-                    final vehicle = vehicleMap[entry.vehicleId];
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      sliver: SliverToBoxAdapter(
+                        child: _VehicleFilter(
+                          vehicles: sortedVehicles,
+                          selectedVehicleId: activeVehicleId,
+                          vehicleLabel: _vehicleLabel,
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedVehicleId = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
 
-                    return _FuelEntryCard(
-                      entry: entry,
-                      vehicle: vehicle,
-                      onEdit: () {
-                        _openEditDialog(context, entry);
-                      },
-                      onDelete: () {
-                        _confirmDelete(context, ref, entry);
-                      },
-                    );
-                  },
+                    if (activeVehicleId != null)
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                        sliver: SliverToBoxAdapter(
+                          child: _ActiveFilterInfo(
+                            vehicle: vehicleMap[activeVehicleId],
+                            onClear: () {
+                              setState(() {
+                                _selectedVehicleId = null;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+
+                    if (visibleEntries.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyFuelView(
+                          hasVehicleFilter: activeVehicleId != null,
+                          onAddFuelEntry: () {
+                            _openAddDialog(context);
+                          },
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                        sliver: SliverList.separated(
+                          itemCount: visibleEntries.length,
+                          separatorBuilder: (context, index) {
+                            return const SizedBox(height: 12);
+                          },
+                          itemBuilder: (context, index) {
+                            final entry = visibleEntries[index];
+                            final vehicle = vehicleMap[entry.vehicleId];
+
+                            return _FuelEntryCard(
+                              entry: entry,
+                              vehicle: vehicle,
+                              onEdit: () {
+                                _openEditDialog(context, entry);
+                              },
+                              onDelete: () {
+                                _confirmDelete(context, ref, entry);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                  ],
                 ),
               );
             },
@@ -162,9 +294,97 @@ class FuelPage extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openAddDialog(context),
+        onPressed: () {
+          _openAddDialog(context);
+        },
         icon: const Icon(Icons.add),
         label: const Text('Tanken'),
+      ),
+    );
+  }
+}
+
+class _VehicleFilter extends StatelessWidget {
+  const _VehicleFilter({
+    required this.vehicles,
+    required this.selectedVehicleId,
+    required this.vehicleLabel,
+    required this.onChanged,
+  });
+
+  final List<Vehicle> vehicles;
+  final String? selectedVehicleId;
+  final String Function(Vehicle vehicle) vehicleLabel;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String?>(
+      initialValue: selectedVehicleId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Fahrzeug',
+        prefixIcon: Icon(Icons.directions_car_outlined),
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        const DropdownMenuItem<String?>(
+          value: null,
+          child: Text('Alle Fahrzeuge'),
+        ),
+        ...vehicles.map((vehicle) {
+          return DropdownMenuItem<String?>(
+            value: vehicle.id,
+            child: Text(
+              vehicleLabel(vehicle),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }),
+      ],
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _ActiveFilterInfo extends StatelessWidget {
+  const _ActiveFilterInfo({required this.vehicle, required this.onClear});
+
+  final Vehicle? vehicle;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    if (vehicle == null) {
+      return const SizedBox.shrink();
+    }
+
+    final colors = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.filter_alt_outlined, size: 19, color: colors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Gefiltert nach ${vehicle!.name}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Filter entfernen',
+            visualDensity: VisualDensity.compact,
+            onPressed: onClear,
+            icon: const Icon(Icons.close),
+          ),
+        ],
       ),
     );
   }
@@ -218,7 +438,9 @@ class _FuelEntryCard extends StatelessWidget {
       ),
       child: Card(
         elevation: 0,
+        margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: InkWell(
           onTap: onEdit,
           borderRadius: BorderRadius.circular(24),
@@ -275,7 +497,8 @@ class _FuelEntryCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (entry.station != null) ...[
+                      if (entry.station != null &&
+                          entry.station!.trim().isNotEmpty) ...[
                         const SizedBox(height: 12),
                         Row(
                           children: [
@@ -368,8 +591,12 @@ class _EntryValue extends StatelessWidget {
 }
 
 class _EmptyFuelView extends StatelessWidget {
-  const _EmptyFuelView({required this.onAddFuelEntry});
+  const _EmptyFuelView({
+    required this.hasVehicleFilter,
+    required this.onAddFuelEntry,
+  });
 
+  final bool hasVehicleFilter;
   final VoidCallback onAddFuelEntry;
 
   @override
@@ -387,14 +614,19 @@ class _EmptyFuelView extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'Noch keine Tankvorgänge',
+              hasVehicleFilter
+                  ? 'Keine Tankvorgänge für dieses Fahrzeug'
+                  : 'Noch keine Tankvorgänge',
+              textAlign: TextAlign.center,
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Erfasse deinen ersten Tankvorgang.',
+            Text(
+              hasVehicleFilter
+                  ? 'Für das ausgewählte Fahrzeug wurde noch kein Tankvorgang gespeichert.'
+                  : 'Erfasse deinen ersten Tankvorgang.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -411,9 +643,7 @@ class _EmptyFuelView extends StatelessWidget {
 }
 
 class _NoVehicleView extends StatelessWidget {
-  const _NoVehicleView({required this.onAddVehicle});
-
-  final VoidCallback onAddVehicle;
+  const _NoVehicleView();
 
   @override
   Widget build(BuildContext context) {
