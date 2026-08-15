@@ -5,6 +5,7 @@ import '../../models/maintenance_entry.dart';
 import '../../models/vehicle.dart';
 import '../../services/maintenance_provider.dart';
 import '../../services/vehicle_provider.dart';
+import '../../utils/maintenance_status_calculator.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
 import 'add_maintenance_dialog.dart';
 
@@ -140,12 +141,12 @@ class MaintenancePage extends ConsumerWidget {
               };
 
               visibleEntries.sort((first, second) {
-                final firstStatus = MaintenanceStatus.calculate(
+                final firstStatus = calculateMaintenanceStatus(
                   entry: first,
                   vehicle: vehicleMap[first.vehicleId],
                 );
 
-                final secondStatus = MaintenanceStatus.calculate(
+                final secondStatus = calculateMaintenanceStatus(
                   entry: second,
                   vehicle: vehicleMap[second.vehicleId],
                 );
@@ -237,82 +238,6 @@ class MaintenancePage extends ConsumerWidget {
   }
 }
 
-enum MaintenanceStatusType { overdue, dueSoon, okay, noReminder }
-
-class MaintenanceStatus {
-  const MaintenanceStatus({
-    required this.type,
-    required this.label,
-    required this.priority,
-  });
-
-  final MaintenanceStatusType type;
-  final String label;
-  final int priority;
-
-  static MaintenanceStatus calculate({
-    required MaintenanceEntry entry,
-    required Vehicle? vehicle,
-  }) {
-    final today = DateUtils.dateOnly(DateTime.now());
-
-    final nextDate = entry.nextDate == null
-        ? null
-        : DateUtils.dateOnly(entry.nextDate!);
-
-    final currentMileage = vehicle?.mileage;
-    final nextMileage = entry.nextMileage;
-
-    final dateOverdue = nextDate != null && !nextDate.isAfter(today);
-
-    final mileageOverdue =
-        nextMileage != null &&
-        currentMileage != null &&
-        currentMileage >= nextMileage;
-
-    if (dateOverdue || mileageOverdue) {
-      return const MaintenanceStatus(
-        type: MaintenanceStatusType.overdue,
-        label: 'Überfällig',
-        priority: 0,
-      );
-    }
-
-    final daysRemaining = nextDate?.difference(today).inDays;
-
-    final kilometersRemaining = nextMileage == null || currentMileage == null
-        ? null
-        : nextMileage - currentMileage;
-
-    final dateDueSoon = daysRemaining != null && daysRemaining <= 30;
-
-    final mileageDueSoon =
-        kilometersRemaining != null && kilometersRemaining <= 1000;
-
-    if (dateDueSoon || mileageDueSoon) {
-      return const MaintenanceStatus(
-        type: MaintenanceStatusType.dueSoon,
-        label: 'Bald fällig',
-        priority: 1,
-      );
-    }
-
-    if (nextDate != null || nextMileage != null) {
-      return const MaintenanceStatus(
-        type: MaintenanceStatusType.okay,
-        label: 'In Ordnung',
-        priority: 2,
-      );
-    }
-
-    return const MaintenanceStatus(
-      type: MaintenanceStatusType.noReminder,
-      label: 'Keine Erinnerung',
-      priority: 3,
-    );
-  }
-}
-
 class _MaintenanceCard extends StatelessWidget {
   const _MaintenanceCard({
     required this.entry,
@@ -327,7 +252,8 @@ class _MaintenanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final status = MaintenanceStatus.calculate(entry: entry, vehicle: vehicle);
+
+    final status = calculateMaintenanceStatus(entry: entry, vehicle: vehicle);
 
     final statusColor = _statusColor(context, status.type);
 
@@ -461,7 +387,7 @@ class _MaintenanceCard extends StatelessWidget {
                               const SizedBox(height: 5),
                               Text(
                                 'Am ${_formatDate(entry.nextDate!)}'
-                                '${_dateRemainingText(entry.nextDate!)}',
+                                '${_dateRemainingText(entry)}',
                               ),
                             ],
                           ],
@@ -540,11 +466,14 @@ class _MaintenanceCard extends StatelessWidget {
     MaintenanceEntry entry,
     Vehicle? vehicle,
   ) {
-    if (entry.nextMileage == null || vehicle == null) {
+    final remaining = maintenanceKilometersRemaining(
+      entry: entry,
+      vehicle: vehicle,
+    );
+
+    if (remaining == null) {
       return '';
     }
-
-    final remaining = entry.nextMileage! - vehicle.mileage;
 
     if (remaining < 0) {
       return ' · ${_formatMileage(remaining.abs())} km überfällig';
@@ -557,10 +486,12 @@ class _MaintenanceCard extends StatelessWidget {
     return ' · noch ${_formatMileage(remaining)} km';
   }
 
-  static String _dateRemainingText(DateTime nextDate) {
-    final today = DateUtils.dateOnly(DateTime.now());
-    final date = DateUtils.dateOnly(nextDate);
-    final remaining = date.difference(today).inDays;
+  static String _dateRemainingText(MaintenanceEntry entry) {
+    final remaining = maintenanceDaysRemaining(entry);
+
+    if (remaining == null) {
+      return '';
+    }
 
     if (remaining < 0) {
       return ' · seit ${remaining.abs()} Tagen überfällig';

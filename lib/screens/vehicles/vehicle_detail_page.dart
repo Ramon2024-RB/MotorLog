@@ -80,6 +80,10 @@ class VehicleDetailPage extends ConsumerWidget {
     context.go('/tires/${vehicle.id}');
   }
 
+  void _openDocuments(BuildContext context, Vehicle vehicle) {
+    context.go('/documents/${vehicle.id}');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vehiclesAsync = ref.watch(vehicleProvider);
@@ -185,26 +189,26 @@ class VehicleDetailPage extends ConsumerWidget {
             },
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
               children: [
-                _VehicleHeaderCard(vehicle: vehicle),
-                const SizedBox(height: 24),
-
-                Text(
-                  'Übersicht',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                _VehicleHeaderCard(
+                  vehicle: vehicle,
+                  formattedMileage: _formatMileage(vehicle.mileage),
                 ),
+
+                const SizedBox(height: 22),
+
+                const _SectionTitle(title: 'Übersicht'),
+
                 const SizedBox(height: 12),
 
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.2,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 1.55,
                   children: [
                     _DetailTile(
                       icon: Icons.speed,
@@ -229,22 +233,18 @@ class VehicleDetailPage extends ConsumerWidget {
                       value: vehicleStatistics.refuels.toString(),
                     ),
                     _DetailTile(
-                      icon: Icons.route,
-                      title: 'Ausgewertete Strecke',
+                      icon: Icons.route_outlined,
+                      title: 'Ausgewertet',
                       value:
                           '${_formatMileage(vehicleStatistics.totalDistance)} km',
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 22),
 
-                Text(
-                  'Letzter Tankvorgang',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
+                const _SectionTitle(title: 'Letzter Tankvorgang'),
+
                 const SizedBox(height: 12),
 
                 if (latestFuelEntry == null)
@@ -258,19 +258,16 @@ class VehicleDetailPage extends ConsumerWidget {
                       latestFuelEntry.totalPrice,
                       2,
                     ),
+                    formattedMileage: _formatMileage(latestFuelEntry.mileage),
                     onTap: () {
                       _openFuel(context, vehicle);
                     },
                   ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 22),
 
-                Text(
-                  'Fahrzeugakte',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
+                const _SectionTitle(title: 'Fahrzeugakte'),
+
                 const SizedBox(height: 12),
 
                 _MenuCard(
@@ -283,7 +280,7 @@ class VehicleDetailPage extends ConsumerWidget {
                   },
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 _MenuCard(
                   icon: Icons.receipt_long_outlined,
@@ -294,7 +291,7 @@ class VehicleDetailPage extends ConsumerWidget {
                   },
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 _MenuCard(
                   icon: Icons.build_outlined,
@@ -306,7 +303,7 @@ class VehicleDetailPage extends ConsumerWidget {
                   },
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 _MenuCard(
                   icon: Icons.tire_repair,
@@ -317,13 +314,15 @@ class VehicleDetailPage extends ConsumerWidget {
                   },
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 _MenuCard(
                   icon: Icons.description_outlined,
                   title: 'Dokumente',
                   subtitle: 'Rechnungen und Fahrzeugunterlagen',
-                  onTap: () {},
+                  onTap: () {
+                    _openDocuments(context, vehicle);
+                  },
                 ),
               ],
             ),
@@ -335,20 +334,24 @@ class VehicleDetailPage extends ConsumerWidget {
 }
 
 class _VehicleHeaderCard extends StatelessWidget {
-  const _VehicleHeaderCard({required this.vehicle});
+  const _VehicleHeaderCard({
+    required this.vehicle,
+    required this.formattedMileage,
+  });
 
   final Vehicle vehicle;
+  final String formattedMileage;
 
   IconData _vehicleIcon() {
     switch (vehicle.vehicleType.toLowerCase()) {
       case 'camper':
-        return Icons.airport_shuttle;
+        return Icons.airport_shuttle_outlined;
       case 'motorrad':
         return Icons.two_wheeler;
       case 'transporter':
         return Icons.local_shipping_outlined;
       default:
-        return Icons.directions_car;
+        return Icons.directions_car_outlined;
     }
   }
 
@@ -360,10 +363,10 @@ class _VehicleHeaderCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       padding: EdgeInsets.zero,
       child: Container(
-        padding: const EdgeInsets.all(22),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,11 +374,11 @@ class _VehicleHeaderCard extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  radius: 31,
+                  radius: 25,
                   backgroundColor: colorScheme.primary,
                   child: Icon(
                     _vehicleIcon(),
-                    size: 32,
+                    size: 27,
                     color: colorScheme.onPrimary,
                   ),
                 ),
@@ -383,8 +386,8 @@ class _VehicleHeaderCard extends StatelessWidget {
                 if (vehicle.isDefault)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                      horizontal: 9,
+                      vertical: 5,
                     ),
                     decoration: BoxDecoration(
                       color: colorScheme.primary,
@@ -395,14 +398,15 @@ class _VehicleHeaderCard extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.star,
-                          size: 16,
+                          size: 15,
                           color: colorScheme.onPrimary,
                         ),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 4),
                         Text(
                           'Standard',
                           style: TextStyle(
                             color: colorScheme.onPrimary,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -411,22 +415,32 @@ class _VehicleHeaderCard extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 20),
+
+            const SizedBox(height: 14),
+
             Text(
               vehicle.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: Theme.of(
                 context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 5),
+
+            const SizedBox(height: 3),
+
             Text(
               '${vehicle.brand} ${vehicle.model}',
-              style: Theme.of(context).textTheme.titleMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
-            const SizedBox(height: 14),
+
+            const SizedBox(height: 12),
+
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 7,
+              runSpacing: 7,
               children: [
                 _InfoChip(
                   icon: Icons.category_outlined,
@@ -436,13 +450,13 @@ class _VehicleHeaderCard extends StatelessWidget {
                   icon: Icons.local_gas_station_outlined,
                   label: vehicle.fuelType,
                 ),
-                _InfoChip(icon: Icons.speed, label: '${vehicle.mileage} km'),
+                _InfoChip(icon: Icons.speed, label: '$formattedMileage km'),
                 _InfoChip(
                   icon: Icons.calendar_today_outlined,
                   label: vehicle.year.toString(),
                 ),
                 if (vehicle.licensePlate != null &&
-                    vehicle.licensePlate!.isNotEmpty)
+                    vehicle.licensePlate!.trim().isNotEmpty)
                   _InfoChip(
                     icon: Icons.badge_outlined,
                     label: vehicle.licensePlate!,
@@ -465,17 +479,20 @@ class _InfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(13),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15),
+          Icon(icon, size: 14),
           const SizedBox(width: 5),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
         ],
       ),
     );
@@ -499,25 +516,27 @@ class _DetailTile extends StatelessWidget {
 
     return Card(
       elevation: 0,
+      margin: EdgeInsets.zero,
       color: colorScheme.surfaceContainerHighest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: colorScheme.primary),
+            Icon(icon, color: colorScheme.primary, size: 22),
             const Spacer(),
             Text(
               value,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               title,
-              maxLines: 2,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -533,6 +552,7 @@ class _LatestFuelCard extends StatelessWidget {
     required this.formattedDate,
     required this.formattedLiters,
     required this.formattedPrice,
+    required this.formattedMileage,
     required this.onTap,
   });
 
@@ -540,6 +560,7 @@ class _LatestFuelCard extends StatelessWidget {
   final String formattedDate;
   final String formattedLiters;
   final String formattedPrice;
+  final String formattedMileage;
   final VoidCallback onTap;
 
   @override
@@ -551,20 +572,23 @@ class _LatestFuelCard extends StatelessWidget {
       padding: EdgeInsets.zero,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               CircleAvatar(
-                radius: 27,
+                radius: 23,
                 backgroundColor: colorScheme.primaryContainer,
                 child: Icon(
                   Icons.local_gas_station,
                   color: colorScheme.primary,
+                  size: 23,
                 ),
               ),
-              const SizedBox(width: 14),
+
+              const SizedBox(width: 12),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -575,18 +599,22 @@ class _LatestFuelCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 17,
+                        fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 4),
+
+                    const SizedBox(height: 3),
+
                     Text(
                       formattedDate,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    const SizedBox(height: 10),
+
+                    const SizedBox(height: 7),
+
                     Wrap(
-                      spacing: 12,
-                      runSpacing: 6,
+                      spacing: 10,
+                      runSpacing: 4,
                       children: [
                         Text(
                           '$formattedLiters Liter',
@@ -597,7 +625,7 @@ class _LatestFuelCard extends StatelessWidget {
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         Text(
-                          '${entry.mileage} km',
+                          '$formattedMileage km',
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ],
@@ -605,6 +633,8 @@ class _LatestFuelCard extends StatelessWidget {
                   ],
                 ),
               ),
+
+              const SizedBox(width: 6),
               const Icon(Icons.chevron_right),
             ],
           ),
@@ -651,42 +681,72 @@ class _MenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return MotorLogCard(
       margin: EdgeInsets.zero,
       padding: EdgeInsets.zero,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              CircleAvatar(child: Icon(icon)),
-              const SizedBox(width: 14),
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: colorScheme.primaryContainer,
+                child: Icon(icon, color: colorScheme.primary, size: 22),
+              ),
+
+              const SizedBox(width: 13),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 17,
+                        fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right),
+
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right, size: 21),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 }

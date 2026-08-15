@@ -10,6 +10,7 @@ import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
 import '../../services/maintenance_provider.dart';
 import '../../services/vehicle_provider.dart';
+import '../../utils/maintenance_status_calculator.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
@@ -200,6 +201,51 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               .where((entry) => entry.vehicleId == selectedVehicle.id)
               .toList();
 
+          final upcomingMaintenance = maintenance
+              .where(
+                (entry) => entry.nextDate != null || entry.nextMileage != null,
+              )
+              .toList();
+
+          upcomingMaintenance.sort((a, b) {
+            final firstStatus = calculateMaintenanceStatus(
+              entry: a,
+              vehicle: selectedVehicle,
+            );
+
+            final secondStatus = calculateMaintenanceStatus(
+              entry: b,
+              vehicle: selectedVehicle,
+            );
+
+            final priorityComparison = firstStatus.priority.compareTo(
+              secondStatus.priority,
+            );
+
+            if (priorityComparison != 0) {
+              return priorityComparison;
+            }
+
+            final firstDate =
+                a.nextDate ??
+                DateTime.fromMillisecondsSinceEpoch(8640000000000000);
+
+            final secondDate =
+                b.nextDate ??
+                DateTime.fromMillisecondsSinceEpoch(8640000000000000);
+
+            final dateComparison = firstDate.compareTo(secondDate);
+
+            if (dateComparison != 0) {
+              return dateComparison;
+            }
+
+            final firstMileage = a.nextMileage ?? 2147483647;
+            final secondMileage = b.nextMileage ?? 2147483647;
+
+            return firstMileage.compareTo(secondMileage);
+          });
+
           final statistics = calculateVehicleStatistics(fuelEntries);
 
           final expenseTotal = expenses.fold<double>(
@@ -236,10 +282,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   'Hier siehst du alles Wichtige zu deinen Fahrzeugen.',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
                 SizedBox(
-                  height: 245,
+                  height: 190,
                   child: PageView.builder(
                     controller: PageController(
                       viewportFraction: sortedVehicles.length > 1 ? 0.94 : 1.0,
@@ -274,7 +320,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ),
 
                 if (sortedVehicles.length > 1) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(sortedVehicles.length, (index) {
@@ -297,7 +343,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   ),
                 ],
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 26),
 
                 const _SectionTitle(title: 'Schnellzugriff'),
 
@@ -359,7 +405,45 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   ],
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 26),
+
+                Row(
+                  children: [
+                    const Expanded(
+                      child: _SectionTitle(title: 'Anstehende Wartungen'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        _openMaintenance(selectedVehicle);
+                      },
+                      child: const Text('Alle'),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                if (upcomingMaintenance.isEmpty)
+                  _NoUpcomingMaintenanceCard(
+                    onTap: () {
+                      _openMaintenance(selectedVehicle);
+                    },
+                  )
+                else
+                  ...upcomingMaintenance.take(3).map((entry) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _UpcomingMaintenanceCard(
+                        entry: entry,
+                        vehicle: selectedVehicle,
+                        onTap: () {
+                          _openMaintenance(selectedVehicle);
+                        },
+                      ),
+                    );
+                  }),
+
+                const SizedBox(height: 18),
 
                 const _SectionTitle(title: 'Übersicht'),
 
@@ -462,6 +546,271 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 }
 
+class _UpcomingMaintenanceCard extends StatelessWidget {
+  const _UpcomingMaintenanceCard({
+    required this.entry,
+    required this.vehicle,
+    required this.onTap,
+  });
+
+  final MaintenanceEntry entry;
+  final Vehicle vehicle;
+  final VoidCallback onTap;
+
+  String _formatMileage(int value) {
+    final text = value.toString();
+    final buffer = StringBuffer();
+
+    for (var index = 0; index < text.length; index++) {
+      final remaining = text.length - index;
+
+      buffer.write(text[index]);
+
+      if (remaining > 1 && remaining % 3 == 1) {
+        buffer.write('.');
+      }
+    }
+
+    return buffer.toString();
+  }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day.$month.${date.year}';
+  }
+
+  String _reminderText() {
+    final parts = <String>[];
+
+    final days = maintenanceDaysRemaining(entry);
+
+    if (days != null) {
+      if (days < 0) {
+        parts.add('seit ${days.abs()} Tagen');
+      } else if (days == 0) {
+        parts.add('heute');
+      } else if (days == 1) {
+        parts.add('morgen');
+      } else if (days <= 30) {
+        parts.add('in $days Tagen');
+      } else {
+        parts.add(_formatDate(entry.nextDate!));
+      }
+    }
+
+    final remainingKilometers = maintenanceKilometersRemaining(
+      entry: entry,
+      vehicle: vehicle,
+    );
+
+    if (remainingKilometers != null) {
+      if (remainingKilometers < 0) {
+        parts.add(
+          '${_formatMileage(remainingKilometers.abs())} km überschritten',
+        );
+      } else if (remainingKilometers == 0) {
+        parts.add('Kilometerstand erreicht');
+      } else {
+        parts.add('noch ${_formatMileage(remainingKilometers)} km');
+      }
+    }
+
+    return parts.join(' · ');
+  }
+
+  Color _statusColor(BuildContext context, MaintenanceStatusType type) {
+    final colors = Theme.of(context).colorScheme;
+
+    switch (type) {
+      case MaintenanceStatusType.overdue:
+        return colors.error;
+      case MaintenanceStatusType.dueSoon:
+        return colors.tertiary;
+      case MaintenanceStatusType.okay:
+        return colors.primary;
+      case MaintenanceStatusType.noReminder:
+        return colors.outline;
+    }
+  }
+
+  IconData _statusIcon(MaintenanceStatusType type) {
+    switch (type) {
+      case MaintenanceStatusType.overdue:
+        return Icons.error_outline;
+      case MaintenanceStatusType.dueSoon:
+        return Icons.warning_amber_rounded;
+      case MaintenanceStatusType.okay:
+        return Icons.event_available_outlined;
+      case MaintenanceStatusType.noReminder:
+        return Icons.notifications_off_outlined;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = calculateMaintenanceStatus(entry: entry, vehicle: vehicle);
+
+    final color = _statusColor(context, status.type);
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: color.withValues(alpha: 0.25)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.all(17),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 25,
+                backgroundColor: color.withValues(alpha: 0.12),
+                child: Icon(_statusIcon(status.type), color: color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            status.label,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      entry.category,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.notifications_active_outlined,
+                          size: 16,
+                          color: color,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            _reminderText(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoUpcomingMaintenanceCard extends StatelessWidget {
+  const _NoUpcomingMaintenanceCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 25,
+                backgroundColor: colors.primaryContainer,
+                child: Icon(
+                  Icons.notifications_none_outlined,
+                  color: colors.primary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Keine Fälligkeiten',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Für dieses Fahrzeug sind noch keine Wartungserinnerungen hinterlegt.',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _VehicleCard extends StatelessWidget {
   const _VehicleCard({
     required this.vehicle,
@@ -484,57 +833,58 @@ class _VehicleCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       color: colors.primaryContainer,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         child: Padding(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   CircleAvatar(
-                    radius: 28,
+                    radius: 23,
                     backgroundColor: colors.primary,
-                    child: Icon(icon, color: colors.onPrimary, size: 30),
+                    child: Icon(icon, color: colors.onPrimary, size: 25),
                   ),
                   const Spacer(),
                   if (vehicle.isDefault)
                     const Chip(
-                      avatar: Icon(Icons.star, size: 16),
+                      avatar: Icon(Icons.star, size: 15),
                       label: Text('Standard'),
+                      visualDensity: VisualDensity.compact,
                     ),
                 ],
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 13),
               Text(
                 vehicle.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 '${vehicle.brand} ${vehicle.model}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
               const Spacer(),
               Row(
                 children: [
-                  const Icon(Icons.speed, size: 19),
+                  const Icon(Icons.speed, size: 18),
                   const SizedBox(width: 7),
                   Text(
                     '$mileage km',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
-                  const Icon(Icons.chevron_right),
+                  const Icon(Icons.chevron_right, size: 21),
                 ],
               ),
             ],
@@ -566,21 +916,21 @@ class _QuickActionCard extends StatelessWidget {
       elevation: 0,
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           child: SizedBox(
-            height: 112,
+            height: 92,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  radius: 22,
+                  radius: 20,
                   backgroundColor: colors.primaryContainer,
-                  child: Icon(icon, color: colors.primary),
+                  child: Icon(icon, color: colors.primary, size: 22),
                 ),
                 const Spacer(),
                 Text(
@@ -592,7 +942,7 @@ class _QuickActionCard extends StatelessWidget {
                     fontSize: 16,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   subtitle,
                   maxLines: 1,

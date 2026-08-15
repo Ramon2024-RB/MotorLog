@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../models/vehicle.dart';
 import '../../models/vehicle_document.dart';
 import '../../services/document_provider.dart';
+import '../../services/document_storage_service.dart';
 import '../../services/vehicle_provider.dart';
 import '../../widgets/motorlog/motorlog_button.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
@@ -15,7 +16,11 @@ import '../../widgets/motorlog/motorlog_section.dart';
 import '../../widgets/motorlog/motorlog_text_field.dart';
 
 class AddDocumentDialog extends ConsumerStatefulWidget {
-  const AddDocumentDialog({super.key, this.document, this.initialVehicleId});
+  const AddDocumentDialog({
+    super.key,
+    this.document,
+    this.initialVehicleId,
+  });
 
   final VehicleDocument? document;
   final String? initialVehicleId;
@@ -29,6 +34,8 @@ class AddDocumentDialog extends ConsumerStatefulWidget {
 class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _imagePicker = ImagePicker();
+  final DocumentStorageService _storageService =
+      const DocumentStorageService();
 
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
@@ -36,7 +43,21 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
   String? _selectedVehicleId;
   late String _selectedCategory;
   late DateTime _selectedDate;
+
+  /// Aktuell im Dialog ausgewählte Datei.
+  ///
+  /// Bei bestehenden Dokumenten kann das bereits der dauerhafte MotorLog-Pfad
+  /// sein. Bei neu ausgewählten Dateien ist es zunächst der vom Picker
+  /// gelieferte Pfad.
   String? _filePath;
+
+  /// Wird true, sobald der Benutzer im aktuellen Dialog eine neue Datei
+  /// ausgewählt hat. Nur dann muss beim Speichern eine dauerhafte Kopie
+  /// erstellt werden.
+  bool _hasNewFile = false;
+
+  /// Wird true, wenn eine bereits gespeicherte Datei bewusst entfernt wurde.
+  bool _removeExistingFile = false;
 
   bool _isSaving = false;
   bool _isSelectingFile = false;
@@ -62,14 +83,19 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
 
     final document = widget.document;
 
-    _selectedVehicleId = document?.vehicleId ?? widget.initialVehicleId;
+    _selectedVehicleId =
+        document?.vehicleId ?? widget.initialVehicleId;
     _selectedCategory = document?.category ?? 'Rechnung';
     _selectedDate = document?.date ?? DateTime.now();
     _filePath = document?.filePath;
 
-    _titleController = TextEditingController(text: document?.title ?? '');
+    _titleController = TextEditingController(
+      text: document?.title ?? '',
+    );
 
-    _notesController = TextEditingController(text: document?.notes ?? '');
+    _notesController = TextEditingController(
+      text: document?.notes ?? '',
+    );
   }
 
   @override
@@ -91,7 +117,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       }
     }
 
-    final defaultVehicles = vehicles.where((vehicle) => vehicle.isDefault);
+    final defaultVehicles = vehicles.where(
+      (vehicle) => vehicle.isDefault,
+    );
 
     if (defaultVehicles.isNotEmpty) {
       _selectedVehicleId = defaultVehicles.first.id;
@@ -105,7 +133,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(1950),
-      lastDate: DateTime.now().add(const Duration(days: 3650)),
+      lastDate: DateTime.now().add(
+        const Duration(days: 3650),
+      ),
     );
 
     if (selectedDate != null && mounted) {
@@ -135,7 +165,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                     child: Icon(Icons.camera_alt_outlined),
                   ),
                   title: const Text('Foto aufnehmen'),
-                  subtitle: const Text('Dokument mit der Kamera fotografieren'),
+                  subtitle: const Text(
+                    'Dokument mit der Kamera fotografieren',
+                  ),
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     _pickImage(ImageSource.camera);
@@ -146,7 +178,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                     child: Icon(Icons.photo_library_outlined),
                   ),
                   title: const Text('Foto auswählen'),
-                  subtitle: const Text('Bild aus der Fotomediathek verwenden'),
+                  subtitle: const Text(
+                    'Bild aus der Fotomediathek verwenden',
+                  ),
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     _pickImage(ImageSource.gallery);
@@ -157,7 +191,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                     child: Icon(Icons.folder_open_outlined),
                   ),
                   title: const Text('Datei auswählen'),
-                  subtitle: const Text('PDF, Bild oder andere Datei auswählen'),
+                  subtitle: const Text(
+                    'PDF, Bild oder andere Datei auswählen',
+                  ),
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     _pickFile();
@@ -193,6 +229,8 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       if (image != null) {
         setState(() {
           _filePath = image.path;
+          _hasNewFile = true;
+          _removeExistingFile = false;
         });
       }
     } catch (error) {
@@ -201,7 +239,11 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Foto konnte nicht ausgewählt werden: $error')),
+        SnackBar(
+          content: Text(
+            'Foto konnte nicht ausgewählt werden: $error',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -229,9 +271,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       }
 
       if (file != null) {
-        final path = file.path;
+        final selectedPath = file.path;
 
-        if (path == null) {
+        if (selectedPath == null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -244,7 +286,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
         }
 
         setState(() {
-          _filePath = path;
+          _filePath = selectedPath;
+          _hasNewFile = true;
+          _removeExistingFile = false;
         });
       }
     } catch (error) {
@@ -253,7 +297,11 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Datei konnte nicht ausgewählt werden: $error')),
+        SnackBar(
+          content: Text(
+            'Datei konnte nicht ausgewählt werden: $error',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -264,6 +312,18 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
     }
   }
 
+  void _removeFile() {
+    setState(() {
+      _filePath = null;
+
+      if (widget.document?.filePath != null) {
+        _removeExistingFile = true;
+      }
+
+      _hasNewFile = false;
+    });
+  }
+
   Future<void> _saveDocument() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -271,7 +331,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
 
     if (_selectedVehicleId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte ein Fahrzeug auswählen.')),
+        const SnackBar(
+          content: Text('Bitte ein Fahrzeug auswählen.'),
+        ),
       );
 
       return;
@@ -281,29 +343,80 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       _isSaving = true;
     });
 
+    String? newlySavedFilePath;
+
     try {
+      String? permanentFilePath = _filePath;
+
+      // Eine neu ausgewählte Datei wird jetzt in MotorLogs eigenen
+      // Dokumentenordner kopiert.
+      if (_hasNewFile && _filePath != null) {
+        newlySavedFilePath = await _storageService.saveFile(
+          _filePath!,
+        );
+
+        permanentFilePath = newlySavedFilePath;
+      }
+
+      // Wurde die vorhandene Datei entfernt, speichern wir null.
+      if (_removeExistingFile && !_hasNewFile) {
+        permanentFilePath = null;
+      }
+
       final document = VehicleDocument(
         id: widget.document?.id ?? const Uuid().v4(),
         vehicleId: _selectedVehicleId!,
         title: _titleController.text.trim(),
         category: _selectedCategory,
         date: _selectedDate,
-        filePath: _filePath,
+        filePath: permanentFilePath,
         notes: _notesController.text.trim().isEmpty
             ? null
             : _notesController.text.trim(),
       );
 
       if (_isEditing) {
-        await ref.read(documentProvider.notifier).updateDocument(document);
+        await ref
+            .read(documentProvider.notifier)
+            .updateDocument(document);
       } else {
-        await ref.read(documentProvider.notifier).addDocument(document);
+        await ref
+            .read(documentProvider.notifier)
+            .addDocument(document);
+      }
+
+      // Erst NACH erfolgreichem Speichern in der Datenbank löschen wir
+      // die vorherige Datei.
+      final oldFilePath = widget.document?.filePath;
+
+      final oldFileWasReplaced =
+          _hasNewFile &&
+          oldFilePath != null &&
+          oldFilePath != permanentFilePath;
+
+      final oldFileWasRemoved =
+          _removeExistingFile && oldFilePath != null;
+
+      if (oldFileWasReplaced || oldFileWasRemoved) {
+        await _storageService.deleteFile(oldFilePath);
       }
 
       if (mounted) {
         Navigator.of(context).pop();
       }
     } catch (error) {
+      // Falls die neue Datei bereits kopiert wurde, das Speichern des
+      // Dokuments danach aber fehlschlägt, räumen wir die Kopie wieder auf.
+      if (newlySavedFilePath != null) {
+        try {
+          await _storageService.deleteFile(
+            newlySavedFilePath,
+          );
+        } catch (_) {
+          // Der ursprüngliche Fehler soll angezeigt werden.
+        }
+      }
+
       if (!mounted) {
         return;
       }
@@ -314,7 +427,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Dokument konnte nicht gespeichert werden: $error'),
+          content: Text(
+            'Dokument konnte nicht gespeichert werden: $error',
+          ),
         ),
       );
     }
@@ -381,7 +496,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            _isEditing ? 'Dokument bearbeiten' : 'Dokument hinzufügen',
+            _isEditing
+                ? 'Dokument bearbeiten'
+                : 'Dokument hinzufügen',
           ),
           leading: IconButton(
             onPressed: _isSaving
@@ -398,7 +515,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
                     )
                   : const Text('Speichern'),
             ),
@@ -406,7 +525,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
         ),
         body: vehiclesAsync.when(
           loading: () {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
           },
           error: (error, stackTrace) {
             return Center(
@@ -441,14 +562,20 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
             return Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.only(top: 8, bottom: 32),
+                padding: const EdgeInsets.only(
+                  top: 8,
+                  bottom: 32,
+                ),
                 children: [
                   MotorLogSection(
                     title: 'Fahrzeug',
-                    subtitle: 'Wähle das Fahrzeug für dieses Dokument aus.',
+                    subtitle:
+                        'Wähle das Fahrzeug für dieses Dokument aus.',
                     child: Column(
                       children: [
-                        _SelectedDocumentVehicleCard(vehicle: selectedVehicle),
+                        _SelectedDocumentVehicleCard(
+                          vehicle: selectedVehicle,
+                        ),
                         const SizedBox(height: 14),
                         MotorLogDropdown<String>(
                           value: _selectedVehicleId,
@@ -477,7 +604,8 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                   ),
                   MotorLogSection(
                     title: 'Dokument',
-                    subtitle: 'Kategorie und Bezeichnung des Dokuments.',
+                    subtitle:
+                        'Kategorie und Bezeichnung des Dokuments.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: Column(
@@ -485,7 +613,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                           MotorLogDropdown<String>(
                             value: _selectedCategory,
                             label: 'Kategorie',
-                            icon: _categoryIcon(_selectedCategory),
+                            icon: _categoryIcon(
+                              _selectedCategory,
+                            ),
                             items: _categories.map((category) {
                               return DropdownMenuItem<String>(
                                 value: category,
@@ -508,11 +638,14 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                           MotorLogTextField(
                             controller: _titleController,
                             label: 'Bezeichnung',
-                            hint: 'Zum Beispiel: TÜV Bericht 2026',
+                            hint:
+                                'Zum Beispiel: TÜV Bericht 2026',
                             icon: Icons.edit_outlined,
-                            textInputAction: TextInputAction.next,
+                            textInputAction:
+                                TextInputAction.next,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              if (value == null ||
+                                  value.trim().isEmpty) {
                                 return 'Pflichtfeld';
                               }
 
@@ -525,12 +658,15 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                   ),
                   MotorLogSection(
                     title: 'Datum',
-                    subtitle: 'Wann wurde das Dokument ausgestellt?',
+                    subtitle:
+                        'Wann wurde das Dokument ausgestellt?',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: InkWell(
-                        onTap: _isSaving ? null : _selectDate,
-                        borderRadius: BorderRadius.circular(18),
+                        onTap:
+                            _isSaving ? null : _selectDate,
+                        borderRadius:
+                            BorderRadius.circular(18),
                         child: InputDecorator(
                           decoration: InputDecoration(
                             labelText: 'Dokumentdatum',
@@ -538,23 +674,28 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                               Icons.calendar_today_outlined,
                             ),
                             filled: true,
-                            fillColor: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerLowest,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerLowest,
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(18),
+                              borderRadius:
+                                  BorderRadius.circular(18),
                               borderSide: BorderSide.none,
                             ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(18),
+                            enabledBorder:
+                                OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(18),
                               borderSide: BorderSide(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.outlineVariant,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
                               ),
                             ),
                           ),
-                          child: Text(_formatDate(_selectedDate)),
+                          child: Text(
+                            _formatDate(_selectedDate),
+                          ),
                         ),
                       ),
                     ),
@@ -567,28 +708,29 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                       margin: EdgeInsets.zero,
                       child: _filePath == null
                           ? _EmptyFileView(
-                              isLoading: _isSelectingFile,
-                              onAddFile: _showFileSourcePicker,
+                              isLoading:
+                                  _isSelectingFile,
+                              onAddFile:
+                                  _showFileSourcePicker,
                             )
                           : _SelectedFileView(
-                              fileName: _fileName(_filePath!),
-                              isImage: _isImageFile(_filePath!),
+                              fileName:
+                                  _fileName(_filePath!),
+                              isImage:
+                                  _isImageFile(_filePath!),
                               onReplace: _isSaving
                                   ? null
                                   : _showFileSourcePicker,
                               onRemove: _isSaving
                                   ? null
-                                  : () {
-                                      setState(() {
-                                        _filePath = null;
-                                      });
-                                    },
+                                  : _removeFile,
                             ),
                     ),
                   ),
                   MotorLogSection(
                     title: 'Notizen',
-                    subtitle: 'Zusätzliche Informationen zum Dokument.',
+                    subtitle:
+                        'Zusätzliche Informationen zum Dokument.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: MotorLogTextField(
@@ -602,14 +744,20 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      12,
+                      20,
+                      12,
+                    ),
                     child: MotorLogButton(
                       label: _isEditing
                           ? 'Änderungen speichern'
                           : 'Dokument speichern',
                       icon: Icons.save_outlined,
                       isLoading: _isSaving,
-                      onPressed: _isSaving ? null : _saveDocument,
+                      onPressed:
+                          _isSaving ? null : _saveDocument,
                     ),
                   ),
                 ],
@@ -623,7 +771,9 @@ class _AddDocumentDialogState extends ConsumerState<AddDocumentDialog> {
 }
 
 class _SelectedDocumentVehicleCard extends StatelessWidget {
-  const _SelectedDocumentVehicleCard({required this.vehicle});
+  const _SelectedDocumentVehicleCard({
+    required this.vehicle,
+  });
 
   final Vehicle vehicle;
 
@@ -668,16 +818,22 @@ class _SelectedDocumentVehicleCard extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
                     vehicle.name,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   const SizedBox(height: 4),
-                  Text('${vehicle.brand} ${vehicle.model}'),
+                  Text(
+                    '${vehicle.brand} ${vehicle.model}',
+                  ),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -688,7 +844,8 @@ class _SelectedDocumentVehicleCard extends StatelessWidget {
                         label: vehicle.vehicleType,
                       ),
                       _VehicleInfoChip(
-                        icon: Icons.local_gas_station_outlined,
+                        icon: Icons
+                            .local_gas_station_outlined,
                         label: vehicle.fuelType,
                       ),
                       _VehicleInfoChip(
@@ -708,7 +865,10 @@ class _SelectedDocumentVehicleCard extends StatelessWidget {
 }
 
 class _VehicleInfoChip extends StatelessWidget {
-  const _VehicleInfoChip({required this.icon, required this.label});
+  const _VehicleInfoChip({
+    required this.icon,
+    required this.label,
+  });
 
   final IconData icon;
   final String label;
@@ -716,9 +876,15 @@ class _VehicleInfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
+        color: Theme.of(context)
+            .colorScheme
+            .surface
+            .withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -726,7 +892,12 @@ class _VehicleInfoChip extends StatelessWidget {
         children: [
           Icon(icon, size: 15),
           const SizedBox(width: 5),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
@@ -734,7 +905,10 @@ class _VehicleInfoChip extends StatelessWidget {
 }
 
 class _EmptyFileView extends StatelessWidget {
-  const _EmptyFileView({required this.onAddFile, required this.isLoading});
+  const _EmptyFileView({
+    required this.onAddFile,
+    required this.isLoading,
+  });
 
   final VoidCallback onAddFile;
   final bool isLoading;
@@ -745,11 +919,18 @@ class _EmptyFileView extends StatelessWidget {
 
     return Column(
       children: [
-        Icon(Icons.cloud_upload_outlined, size: 46, color: colorScheme.primary),
+        Icon(
+          Icons.cloud_upload_outlined,
+          size: 46,
+          color: colorScheme.primary,
+        ),
         const SizedBox(height: 12),
         const Text(
           'Noch keine Datei hinterlegt',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
@@ -764,11 +945,17 @@ class _EmptyFileView extends StatelessWidget {
               ? const SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
                 )
-              : const Icon(Icons.add_photo_alternate_outlined),
+              : const Icon(
+                  Icons.add_photo_alternate_outlined,
+                ),
           label: Text(
-            isLoading ? 'Wird geöffnet...' : 'Datei oder Foto hinzufügen',
+            isLoading
+                ? 'Wird geöffnet...'
+                : 'Datei oder Foto hinzufügen',
           ),
         ),
       ],
@@ -799,27 +986,37 @@ class _SelectedFileView extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 25,
-              backgroundColor: colorScheme.primaryContainer,
+              backgroundColor:
+                  colorScheme.primaryContainer,
               child: Icon(
-                isImage ? Icons.image_outlined : Icons.description_outlined,
+                isImage
+                    ? Icons.image_outlined
+                    : Icons.description_outlined,
                 color: colorScheme.primary,
               ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isImage ? 'Foto hinterlegt' : 'Datei hinterlegt',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    isImage
+                        ? 'Foto hinterlegt'
+                        : 'Datei hinterlegt',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     fileName,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall,
                   ),
                 ],
               ),
