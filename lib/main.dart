@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
+import 'services/notification_service.dart';
 
-void main() {
-  runApp(
-    const ProviderScope(
-      child: MotorLogApp(),
-    ),
-  );
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await NotificationService.instance.initialize();
+  await NotificationService.instance.requestPermissions();
+
+  runApp(const ProviderScope(child: MotorLogApp()));
 }
 
 class MotorLogApp extends StatelessWidget {
@@ -21,9 +23,7 @@ class MotorLogApp extends StatelessWidget {
       title: 'MotorLog',
       routerConfig: appRouter,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF176B5B),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF176B5B)),
         useMaterial3: true,
       ),
     );

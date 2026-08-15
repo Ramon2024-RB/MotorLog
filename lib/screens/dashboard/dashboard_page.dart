@@ -9,6 +9,7 @@ import '../../models/vehicle.dart';
 import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
 import '../../services/maintenance_provider.dart';
+import '../../services/notification_service.dart';
 import '../../services/vehicle_provider.dart';
 import '../../utils/maintenance_status_calculator.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
@@ -123,6 +124,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     context.go('/documents/${vehicle.id}');
   }
 
+  Future<void> _showTestNotification() async {
+    await NotificationService.instance.showTestNotification();
+  }
+
   @override
   Widget build(BuildContext context) {
     final vehiclesAsync = ref.watch(vehicleProvider);
@@ -136,6 +141,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           'MotorLog',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Test-Benachrichtigung',
+            onPressed: _showTestNotification,
+            icon: const Icon(Icons.notifications_outlined),
+          ),
+        ],
       ),
       body: vehiclesAsync.when(
         loading: () {
@@ -256,6 +268,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           final totalCosts = statistics.totalCost + expenseTotal;
 
           final latestFuel = fuelEntries.isEmpty ? null : fuelEntries.last;
+
           final latestExpense = expenses.isEmpty ? null : expenses.last;
 
           return RefreshIndicator(
@@ -283,7 +296,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 20),
-
                 SizedBox(
                   height: 190,
                   child: PageView.builder(
@@ -318,7 +330,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     },
                   ),
                 ),
-
                 if (sortedVehicles.length > 1) ...[
                   const SizedBox(height: 10),
                   Row(
@@ -342,13 +353,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     }),
                   ),
                 ],
-
                 const SizedBox(height: 26),
-
                 const _SectionTitle(title: 'Schnellzugriff'),
-
                 const SizedBox(height: 12),
-
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -375,9 +382,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -404,9 +409,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 26),
-
                 Row(
                   children: [
                     const Expanded(
@@ -420,9 +423,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
                 if (upcomingMaintenance.isEmpty)
                   _NoUpcomingMaintenanceCard(
                     onTap: () {
@@ -442,13 +443,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       ),
                     );
                   }),
-
                 const SizedBox(height: 18),
-
                 const _SectionTitle(title: 'Übersicht'),
-
                 const SizedBox(height: 12),
-
                 _StatRow(
                   left: _StatData(
                     icon: Icons.speed,
@@ -463,9 +460,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     value: '${_formatDecimal(totalCosts, 2)} €',
                   ),
                 ),
-
                 const SizedBox(height: 12),
-
                 _StatRow(
                   left: _StatData(
                     icon: Icons.local_gas_station_outlined,
@@ -478,9 +473,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     value: expenses.length.toString(),
                   ),
                 ),
-
                 const SizedBox(height: 12),
-
                 _StatRow(
                   left: _StatData(
                     icon: Icons.build_outlined,
@@ -493,13 +486,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     value: '${_formatMileage(statistics.totalDistance)} km',
                   ),
                 ),
-
                 const SizedBox(height: 30),
-
                 const _SectionTitle(title: 'Letzte Einträge'),
-
                 const SizedBox(height: 12),
-
                 if (latestFuel != null)
                   _LatestEntryCard(
                     icon: Icons.local_gas_station,
@@ -517,9 +506,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     icon: Icons.local_gas_station_outlined,
                     text: 'Noch kein Tankvorgang gespeichert.',
                   ),
-
                 const SizedBox(height: 12),
-
                 if (latestExpense != null)
                   _LatestEntryCard(
                     icon: Icons.receipt_long_outlined,
