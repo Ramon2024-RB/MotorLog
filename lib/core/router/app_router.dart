@@ -44,7 +44,9 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: '/fuel',
               builder: (context, state) {
-                return const FuelPage();
+                final vehicleId = state.uri.queryParameters['vehicleId'];
+
+                return FuelPage(vehicleId: vehicleId);
               },
             ),
           ],

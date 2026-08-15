@@ -96,7 +96,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 
   void _openFuel(Vehicle vehicle) {
-    context.go('/fuel');
+    context.go(
+      Uri(path: '/fuel', queryParameters: {'vehicleId': vehicle.id}).toString(),
+    );
   }
 
   void _openExpenses(Vehicle vehicle) {
