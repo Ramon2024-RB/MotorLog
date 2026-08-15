@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_file/open_file.dart';
 
 import '../../models/vehicle_document.dart';
 import '../../services/document_provider.dart';
@@ -10,10 +11,7 @@ import '../../widgets/motorlog/motorlog_card.dart';
 import 'add_document_dialog.dart';
 
 class DocumentDetailPage extends ConsumerWidget {
-  const DocumentDetailPage({
-    super.key,
-    required this.documentId,
-  });
+  const DocumentDetailPage({super.key, required this.documentId});
 
   final String documentId;
 
@@ -56,13 +54,7 @@ class DocumentDetailPage extends ConsumerWidget {
   }
 
   bool _isImage(String path) {
-    const imageExtensions = {
-      'jpg',
-      'jpeg',
-      'png',
-      'heic',
-      'webp',
-    };
+    const imageExtensions = {'jpg', 'jpeg', 'png', 'heic', 'webp'};
 
     return imageExtensions.contains(_fileExtension(path));
   }
@@ -99,9 +91,7 @@ class DocumentDetailPage extends ConsumerWidget {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AddDocumentDialog(
-          document: document,
-        );
+        return AddDocumentDialog(document: document);
       },
     );
   }
@@ -116,9 +106,7 @@ class DocumentDetailPage extends ConsumerWidget {
       builder: (context) {
         return AlertDialog(
           title: const Text('Dokument löschen?'),
-          content: Text(
-            'Möchtest du „${document.title}“ wirklich löschen?',
-          ),
+          content: Text('Möchtest du „${document.title}“ wirklich löschen?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -141,17 +129,12 @@ class DocumentDetailPage extends ConsumerWidget {
       return false;
     }
 
-    await ref
-        .read(documentProvider.notifier)
-        .deleteDocument(document.id);
+    await ref.read(documentProvider.notifier).deleteDocument(document.id);
 
     return true;
   }
 
-  void _showImagePreview(
-    BuildContext context,
-    String filePath,
-  ) {
+  void _showImagePreview(BuildContext context, String filePath) {
     showDialog<void>(
       context: context,
       builder: (context) {
@@ -168,20 +151,14 @@ class DocumentDetailPage extends ConsumerWidget {
                       child: Image.file(
                         File(filePath),
                         fit: BoxFit.contain,
-                        errorBuilder: (
-                          context,
-                          error,
-                          stackTrace,
-                        ) {
+                        errorBuilder: (context, error, stackTrace) {
                           return const Padding(
                             padding: EdgeInsets.all(32),
                             child: Center(
                               child: Text(
                                 'Das Bild konnte nicht angezeigt werden.',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                ),
+                                style: TextStyle(color: Colors.white),
                               ),
                             ),
                           );
@@ -208,73 +185,44 @@ class DocumentDetailPage extends ConsumerWidget {
     );
   }
 
-  void _showFileInfo(
-    BuildContext context,
-    String filePath,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              20,
-              4,
-              20,
-              24,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Datei',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.description_outlined,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _fileName(filePath),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Die externe PDF- und Dateiansicht bauen wir im nächsten Schritt ein.',
-                ),
-              ],
+  Future<void> _openExternalFile(BuildContext context, String filePath) async {
+    try {
+      final result = await OpenFile.open(filePath);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      if (result.type != ResultType.done) {
+        final message = result.message.trim();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              message.isEmpty
+                  ? 'Die Datei konnte nicht geöffnet werden.'
+                  : 'Die Datei konnte nicht geöffnet werden: $message',
             ),
           ),
         );
-      },
-    );
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Die Datei konnte nicht geöffnet werden: $error'),
+        ),
+      );
+    }
   }
 
-  Future<void> _openFile(
-    BuildContext context,
-    String storedPath,
-  ) async {
+  Future<void> _openFile(BuildContext context, String storedPath) async {
     const storageService = DocumentStorageService();
 
-    final resolvedFilePath = await storageService.resolveFilePath(
-      storedPath,
-    );
+    final resolvedFilePath = await storageService.resolveFilePath(storedPath);
 
     if (!context.mounted) {
       return;
@@ -293,37 +241,27 @@ class DocumentDetailPage extends ConsumerWidget {
     }
 
     if (_isImage(storedPath)) {
-      _showImagePreview(
-        context,
-        resolvedFilePath,
-      );
+      _showImagePreview(context, resolvedFilePath);
+
       return;
     }
 
-    _showFileInfo(
-      context,
-      resolvedFilePath,
-    );
+    await _openExternalFile(context, resolvedFilePath);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final documentsAsync = ref.watch(documentProvider);
 
-    final loadedDocuments =
-        documentsAsync.asData?.value ?? <VehicleDocument>[];
+    final loadedDocuments = documentsAsync.asData?.value ?? <VehicleDocument>[];
 
-    final selectedDocument = _findDocument(
-      loadedDocuments,
-    );
+    final selectedDocument = _findDocument(loadedDocuments);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Dokumentdetails',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
@@ -331,22 +269,15 @@ class DocumentDetailPage extends ConsumerWidget {
             onPressed: selectedDocument == null
                 ? null
                 : () {
-                    _openEditDialog(
-                      context,
-                      selectedDocument,
-                    );
+                    _openEditDialog(context, selectedDocument);
                   },
-            icon: const Icon(
-              Icons.edit_outlined,
-            ),
+            icon: const Icon(Icons.edit_outlined),
           ),
         ],
       ),
       body: documentsAsync.when(
         loading: () {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+          return const Center(child: CircularProgressIndicator());
         },
         error: (error, stackTrace) {
           return Center(
@@ -355,32 +286,20 @@ class DocumentDetailPage extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.error_outline,
-                    size: 52,
-                  ),
+                  const Icon(Icons.error_outline, size: 52),
                   const SizedBox(height: 16),
                   const Text(
                     'Das Dokument konnte nicht geladen werden.',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    error.toString(),
-                    textAlign: TextAlign.center,
-                  ),
+                  Text(error.toString(), textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
-                      ref
-                          .read(
-                            documentProvider.notifier,
-                          )
-                          .reload();
+                      ref.read(documentProvider.notifier).reload();
                     },
-                    child: const Text(
-                      'Erneut versuchen',
-                    ),
+                    child: const Text('Erneut versuchen'),
                   ),
                 ],
               ),
@@ -403,32 +322,21 @@ class DocumentDetailPage extends ConsumerWidget {
           }
 
           final hasFile =
-              document.filePath != null &&
-              document.filePath!.trim().isNotEmpty;
+              document.filePath != null && document.filePath!.trim().isNotEmpty;
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(
-              20,
-              16,
-              20,
-              40,
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
             children: [
               _DocumentHeaderCard(
                 document: document,
-                categoryIcon: _categoryIcon(
-                  document.category,
-                ),
+                categoryIcon: _categoryIcon(document.category),
               ),
               const SizedBox(height: 24),
               Text(
                 'Informationen',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               MotorLogCard(
@@ -444,14 +352,10 @@ class DocumentDetailPage extends ConsumerWidget {
                     _DetailRow(
                       icon: Icons.calendar_today_outlined,
                       title: 'Dokumentdatum',
-                      value: _formatDate(
-                        document.date,
-                      ),
+                      value: _formatDate(document.date),
                     ),
                     if (document.notes != null &&
-                        document.notes!
-                            .trim()
-                            .isNotEmpty) ...[
+                        document.notes!.trim().isNotEmpty) ...[
                       const Divider(height: 28),
                       _DetailRow(
                         icon: Icons.notes,
@@ -465,27 +369,17 @@ class DocumentDetailPage extends ConsumerWidget {
               const SizedBox(height: 24),
               Text(
                 'Datei',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               if (hasFile)
                 _DocumentFileCard(
-                  fileName: _fileName(
-                    document.filePath!,
-                  ),
-                  isImage: _isImage(
-                    document.filePath!,
-                  ),
+                  fileName: _fileName(document.filePath!),
+                  isImage: _isImage(document.filePath!),
                   onTap: () {
-                    _openFile(
-                      context,
-                      document.filePath!,
-                    );
+                    _openFile(context, document.filePath!);
                   },
                 )
               else
@@ -493,38 +387,22 @@ class DocumentDetailPage extends ConsumerWidget {
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: () {
-                  _openEditDialog(
-                    context,
-                    document,
-                  );
+                  _openEditDialog(context, document);
                 },
-                icon: const Icon(
-                  Icons.edit_outlined,
-                ),
-                label: const Text(
-                  'Dokument bearbeiten',
-                ),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Dokument bearbeiten'),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () async {
-                  final deleted =
-                      await _confirmDelete(
-                        context,
-                        ref,
-                        document,
-                      );
+                  final deleted = await _confirmDelete(context, ref, document);
 
                   if (deleted && context.mounted) {
                     Navigator.of(context).pop();
                   }
                 },
-                icon: const Icon(
-                  Icons.delete_outline,
-                ),
-                label: const Text(
-                  'Dokument löschen',
-                ),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Dokument löschen'),
               ),
             ],
           );
@@ -545,8 +423,7 @@ class _DocumentHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme.of(context).colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return MotorLogCard(
       margin: EdgeInsets.zero,
@@ -563,33 +440,23 @@ class _DocumentHeaderCard extends StatelessWidget {
             CircleAvatar(
               radius: 30,
               backgroundColor: colorScheme.primary,
-              child: Icon(
-                categoryIcon,
-                size: 31,
-                color: colorScheme.onPrimary,
-              ),
+              child: Icon(categoryIcon, size: 31, color: colorScheme.onPrimary),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     document.title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
                     document.category,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ],
               ),
@@ -614,33 +481,22 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme.of(context).colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
           radius: 21,
-          backgroundColor:
-              colorScheme.primaryContainer,
-          child: Icon(
-            icon,
-            size: 20,
-            color: colorScheme.primary,
-          ),
+          backgroundColor: colorScheme.primaryContainer,
+          child: Icon(icon, size: 20, color: colorScheme.primary),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style:
-                    Theme.of(context).textTheme.bodySmall,
-              ),
+              Text(title, style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 3),
               Text(
                 value,
@@ -670,8 +526,7 @@ class _DocumentFileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme.of(context).colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return MotorLogCard(
       margin: EdgeInsets.zero,
@@ -685,12 +540,9 @@ class _DocumentFileCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 27,
-                backgroundColor:
-                    colorScheme.primaryContainer,
+                backgroundColor: colorScheme.primaryContainer,
                 child: Icon(
-                  isImage
-                      ? Icons.image_outlined
-                      : Icons.description_outlined,
+                  isImage ? Icons.image_outlined : Icons.description_outlined,
                   color: colorScheme.primary,
                   size: 27,
                 ),
@@ -698,13 +550,10 @@ class _DocumentFileCard extends StatelessWidget {
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isImage
-                          ? 'Foto anzeigen'
-                          : 'Datei öffnen',
+                      isImage ? 'Foto anzeigen' : 'Datei öffnen',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -714,19 +563,14 @@ class _DocumentFileCard extends StatelessWidget {
                     Text(
                       fileName,
                       maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right,
-              ),
+              const Icon(Icons.chevron_right),
             ],
           ),
         ),
@@ -744,14 +588,10 @@ class _NoFileCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       child: const Row(
         children: [
-          Icon(
-            Icons.insert_drive_file_outlined,
-          ),
+          Icon(Icons.insert_drive_file_outlined),
           SizedBox(width: 12),
           Expanded(
-            child: Text(
-              'Für dieses Dokument ist keine Datei hinterlegt.',
-            ),
+            child: Text('Für dieses Dokument ist keine Datei hinterlegt.'),
           ),
         ],
       ),
