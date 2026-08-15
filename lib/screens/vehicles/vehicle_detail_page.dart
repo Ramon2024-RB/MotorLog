@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/expense.dart';
 import '../../models/fuel_entry.dart';
@@ -11,9 +12,6 @@ import '../../services/maintenance_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
-import '../expenses/expenses_page.dart';
-import '../fuel/fuel_page.dart';
-import '../maintenance/maintenance_page.dart';
 import 'add_vehicle_dialog.dart';
 
 class VehicleDetailPage extends ConsumerWidget {
@@ -59,6 +57,25 @@ class VehicleDetailPage extends ConsumerWidget {
     return '$day.$month.${date.year}';
   }
 
+  void _openFuel(BuildContext context, Vehicle vehicle) {
+    context.go(
+      Uri(path: '/fuel', queryParameters: {'vehicleId': vehicle.id}).toString(),
+    );
+  }
+
+  void _openExpenses(BuildContext context, Vehicle vehicle) {
+    context.go(
+      Uri(
+        path: '/expenses',
+        queryParameters: {'vehicleId': vehicle.id},
+      ).toString(),
+    );
+  }
+
+  void _openMaintenance(BuildContext context, Vehicle vehicle) {
+    context.go('/maintenance/${vehicle.id}');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vehiclesAsync = ref.watch(vehicleProvider);
@@ -67,7 +84,6 @@ class VehicleDetailPage extends ConsumerWidget {
     final maintenanceAsync = ref.watch(maintenanceProvider);
 
     final loadedVehicles = vehiclesAsync.asData?.value ?? <Vehicle>[];
-
     final selectedVehicle = _findVehicle(loadedVehicles);
 
     return Scaffold(
@@ -94,16 +110,20 @@ class VehicleDetailPage extends ConsumerWidget {
         ],
       ),
       body: vehiclesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Fahrzeug konnte nicht geladen werden.\n$error',
-              textAlign: TextAlign.center,
+        loading: () {
+          return const Center(child: CircularProgressIndicator());
+        },
+        error: (error, stackTrace) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Fahrzeug konnte nicht geladen werden.\n$error',
+                textAlign: TextAlign.center,
+              ),
             ),
-          ),
-        ),
+          );
+        },
         data: (vehicles) {
           final vehicle = _findVehicle(vehicles);
 
@@ -165,6 +185,7 @@ class VehicleDetailPage extends ConsumerWidget {
               children: [
                 _VehicleHeaderCard(vehicle: vehicle),
                 const SizedBox(height: 24),
+
                 Text(
                   'Übersicht',
                   style: Theme.of(
@@ -172,6 +193,7 @@ class VehicleDetailPage extends ConsumerWidget {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
+
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -210,7 +232,9 @@ class VehicleDetailPage extends ConsumerWidget {
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 24),
+
                 Text(
                   'Letzter Tankvorgang',
                   style: Theme.of(
@@ -218,6 +242,7 @@ class VehicleDetailPage extends ConsumerWidget {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
+
                 if (latestFuelEntry == null)
                   const _EmptyFuelCard()
                 else
@@ -230,16 +255,12 @@ class VehicleDetailPage extends ConsumerWidget {
                       2,
                     ),
                     onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (context) {
-                            return FuelPage(vehicleId: vehicle.id);
-                          },
-                        ),
-                      );
+                      _openFuel(context, vehicle);
                     },
                   ),
+
                 const SizedBox(height: 24),
+
                 Text(
                   'Fahrzeugakte',
                   style: Theme.of(
@@ -247,60 +268,51 @@ class VehicleDetailPage extends ConsumerWidget {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
+
                 _MenuCard(
                   icon: Icons.local_gas_station_outlined,
                   title: 'Tankvorgänge',
                   subtitle:
                       '${vehicleStatistics.refuels} Tankvorgänge gespeichert',
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) {
-                          return FuelPage(vehicleId: vehicle.id);
-                        },
-                      ),
-                    );
+                    _openFuel(context, vehicle);
                   },
                 ),
+
                 const SizedBox(height: 12),
+
                 _MenuCard(
                   icon: Icons.receipt_long_outlined,
                   title: 'Kosten',
                   subtitle: '${vehicleExpenses.length} Ausgaben gespeichert',
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) {
-                          return ExpensesPage(vehicleId: vehicle.id);
-                        },
-                      ),
-                    );
+                    _openExpenses(context, vehicle);
                   },
                 ),
+
                 const SizedBox(height: 12),
+
                 _MenuCard(
                   icon: Icons.build_outlined,
                   title: 'Wartungen',
                   subtitle:
                       '${vehicleMaintenanceEntries.length} Wartungen gespeichert',
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) {
-                          return MaintenancePage(vehicleId: vehicle.id);
-                        },
-                      ),
-                    );
+                    _openMaintenance(context, vehicle);
                   },
                 ),
+
                 const SizedBox(height: 12),
+
                 _MenuCard(
                   icon: Icons.tire_repair,
                   title: 'Reifen',
                   subtitle: 'Reifensätze und Reifenwechsel',
                   onTap: () {},
                 ),
+
                 const SizedBox(height: 12),
+
                 _MenuCard(
                   icon: Icons.description_outlined,
                   title: 'Dokumente',
