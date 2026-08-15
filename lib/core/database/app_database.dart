@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../models/expense.dart';
 import '../../models/fuel_entry.dart';
 import '../../models/maintenance_entry.dart';
+import '../../models/tire_set.dart';
 import '../../models/vehicle.dart';
 
 class AppDatabase {
@@ -12,7 +13,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const String _databaseName = 'motorlog.db';
-  static const int _databaseVersion = 6;
+  static const int _databaseVersion = 7;
 
   Database? _database;
 
@@ -59,6 +60,7 @@ class AppDatabase {
     await _createFuelEntriesTable(db);
     await _createExpensesTable(db);
     await _createMaintenanceTable(db);
+    await _createTireSetsTable(db);
   }
 
   Future<void> _createFuelEntriesTable(Database db) async {
@@ -116,6 +118,30 @@ class AppDatabase {
     ''');
   }
 
+  Future<void> _createTireSetsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE tire_sets (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        tire_type TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        aspect_ratio INTEGER NOT NULL,
+        rim_diameter INTEGER NOT NULL,
+        manufacturer TEXT,
+        model TEXT,
+        purchase_date TEXT,
+        purchase_price REAL,
+        production_year INTEGER,
+        tread_depth REAL,
+        is_mounted INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON DELETE CASCADE
+      )
+    ''');
+  }
+
   Future<void> _upgradeDatabase(
     Database db,
     int oldVersion,
@@ -143,7 +169,9 @@ class AppDatabase {
 
     if (oldVersion < 5) {
       await _createMaintenanceTable(db);
-    } else if (oldVersion < 6) {
+    }
+
+    if (oldVersion < 6) {
       await db.execute(
         'ALTER TABLE maintenance_entries '
         'ADD COLUMN next_mileage INTEGER',
@@ -154,12 +182,23 @@ class AppDatabase {
         'ADD COLUMN next_date TEXT',
       );
     }
+
+    if (oldVersion < 7) {
+      await _createTireSetsTable(db);
+    }
   }
+
+  // ---------------------------------------------------------------------------
+  // Fahrzeuge
+  // ---------------------------------------------------------------------------
 
   Future<List<Vehicle>> getVehicles() async {
     final db = await database;
 
-    final maps = await db.query('vehicles', orderBy: 'name COLLATE NOCASE ASC');
+    final maps = await db.query(
+      'vehicles',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
 
     return maps.map(Vehicle.fromMap).toList();
   }
@@ -188,14 +227,21 @@ class AppDatabase {
   Future<void> deleteVehicle(String id) async {
     final db = await database;
 
-    await db.delete('vehicles', where: 'id = ?', whereArgs: [id]);
+    await db.delete(
+      'vehicles',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<void> setDefaultVehicle(String vehicleId) async {
     final db = await database;
 
     await db.transaction((transaction) async {
-      await transaction.update('vehicles', {'is_default': 0});
+      await transaction.update(
+        'vehicles',
+        {'is_default': 0},
+      );
 
       await transaction.update(
         'vehicles',
@@ -205,6 +251,10 @@ class AppDatabase {
       );
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Tankvorgänge
+  // ---------------------------------------------------------------------------
 
   Future<List<FuelEntry>> getFuelEntries({String? vehicleId}) async {
     final db = await database;
@@ -243,8 +293,16 @@ class AppDatabase {
   Future<void> deleteFuelEntry(String id) async {
     final db = await database;
 
-    await db.delete('fuel_entries', where: 'id = ?', whereArgs: [id]);
+    await db.delete(
+      'fuel_entries',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
+
+  // ---------------------------------------------------------------------------
+  // Kosten
+  // ---------------------------------------------------------------------------
 
   Future<List<Expense>> getExpenses({String? vehicleId}) async {
     final db = await database;
@@ -283,8 +341,16 @@ class AppDatabase {
   Future<void> deleteExpense(String id) async {
     final db = await database;
 
-    await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
+    await db.delete(
+      'expenses',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
+
+  // ---------------------------------------------------------------------------
+  // Wartungen
+  // ---------------------------------------------------------------------------
 
   Future<List<MaintenanceEntry>> getMaintenanceEntries({
     String? vehicleId,
@@ -325,6 +391,81 @@ class AppDatabase {
   Future<void> deleteMaintenanceEntry(String id) async {
     final db = await database;
 
-    await db.delete('maintenance_entries', where: 'id = ?', whereArgs: [id]);
+    await db.delete(
+      'maintenance_entries',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reifen
+  // ---------------------------------------------------------------------------
+
+  Future<List<TireSet>> getTireSets({String? vehicleId}) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'tire_sets',
+      where: vehicleId == null ? null : 'vehicle_id = ?',
+      whereArgs: vehicleId == null ? null : [vehicleId],
+      orderBy: 'is_mounted DESC, name COLLATE NOCASE ASC',
+    );
+
+    return maps.map(TireSet.fromMap).toList();
+  }
+
+  Future<void> insertTireSet(TireSet tireSet) async {
+    final db = await database;
+
+    await db.insert(
+      'tire_sets',
+      tireSet.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateTireSet(TireSet tireSet) async {
+    final db = await database;
+
+    await db.update(
+      'tire_sets',
+      tireSet.toMap(),
+      where: 'id = ?',
+      whereArgs: [tireSet.id],
+    );
+  }
+
+  Future<void> deleteTireSet(String id) async {
+    final db = await database;
+
+    await db.delete(
+      'tire_sets',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> setMountedTireSet({
+    required String vehicleId,
+    required String tireSetId,
+  }) async {
+    final db = await database;
+
+    await db.transaction((transaction) async {
+      await transaction.update(
+        'tire_sets',
+        {'is_mounted': 0},
+        where: 'vehicle_id = ?',
+        whereArgs: [vehicleId],
+      );
+
+      await transaction.update(
+        'tire_sets',
+        {'is_mounted': 1},
+        where: 'id = ? AND vehicle_id = ?',
+        whereArgs: [tireSetId, vehicleId],
+      );
+    });
   }
 }

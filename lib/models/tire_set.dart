@@ -1,0 +1,141 @@
+class TireSet {
+  const TireSet({
+    required this.id,
+    required this.vehicleId,
+    required this.name,
+    required this.tireType,
+    required this.width,
+    required this.aspectRatio,
+    required this.rimDiameter,
+    required this.isMounted,
+    this.manufacturer,
+    this.model,
+    this.purchaseDate,
+    this.purchasePrice,
+    this.productionYear,
+    this.treadDepth,
+    this.notes,
+  });
+
+  final String id;
+  final String vehicleId;
+
+  /// Eigener Name des Reifensatzes,
+  /// zum Beispiel "Winterreifen 2026".
+  final String name;
+
+  /// Sommerreifen, Winterreifen oder Ganzjahresreifen.
+  final String tireType;
+
+  /// Reifenbreite, zum Beispiel 215.
+  final int width;
+
+  /// Querschnitt, zum Beispiel 65.
+  final int aspectRatio;
+
+  /// Felgendurchmesser in Zoll, zum Beispiel 16.
+  final int rimDiameter;
+
+  final String? manufacturer;
+  final String? model;
+
+  final DateTime? purchaseDate;
+  final double? purchasePrice;
+
+  /// Produktionsjahr des Reifens.
+  final int? productionYear;
+
+  /// Profiltiefe in Millimetern.
+  final double? treadDepth;
+
+  /// Gibt an, ob dieser Reifensatz aktuell montiert ist.
+  final bool isMounted;
+
+  final String? notes;
+
+  String get tireSize {
+    return '$width/$aspectRatio R$rimDiameter';
+  }
+
+  TireSet copyWith({
+    String? id,
+    String? vehicleId,
+    String? name,
+    String? tireType,
+    int? width,
+    int? aspectRatio,
+    int? rimDiameter,
+    String? manufacturer,
+    String? model,
+    DateTime? purchaseDate,
+    double? purchasePrice,
+    int? productionYear,
+    double? treadDepth,
+    bool? isMounted,
+    String? notes,
+  }) {
+    return TireSet(
+      id: id ?? this.id,
+      vehicleId: vehicleId ?? this.vehicleId,
+      name: name ?? this.name,
+      tireType: tireType ?? this.tireType,
+      width: width ?? this.width,
+      aspectRatio: aspectRatio ?? this.aspectRatio,
+      rimDiameter: rimDiameter ?? this.rimDiameter,
+      manufacturer: manufacturer ?? this.manufacturer,
+      model: model ?? this.model,
+      purchaseDate: purchaseDate ?? this.purchaseDate,
+      purchasePrice: purchasePrice ?? this.purchasePrice,
+      productionYear: productionYear ?? this.productionYear,
+      treadDepth: treadDepth ?? this.treadDepth,
+      isMounted: isMounted ?? this.isMounted,
+      notes: notes ?? this.notes,
+    );
+  }
+
+  factory TireSet.fromMap(Map<String, dynamic> map) {
+    return TireSet(
+      id: map['id'] as String,
+      vehicleId: map['vehicle_id'] as String,
+      name: map['name'] as String,
+      tireType: map['tire_type'] as String,
+      width: map['width'] as int,
+      aspectRatio: map['aspect_ratio'] as int,
+      rimDiameter: map['rim_diameter'] as int,
+      manufacturer: map['manufacturer'] as String?,
+      model: map['model'] as String?,
+      purchaseDate: map['purchase_date'] == null
+          ? null
+          : DateTime.parse(map['purchase_date'] as String),
+      purchasePrice: map['purchase_price'] == null
+          ? null
+          : (map['purchase_price'] as num).toDouble(),
+      productionYear: map['production_year'] as int?,
+      treadDepth: map['tread_depth'] == null
+          ? null
+          : (map['tread_depth'] as num).toDouble(),
+      isMounted: (map['is_mounted'] as int) == 1,
+      notes: map['notes'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'vehicle_id': vehicleId,
+      'name': name,
+      'tire_type': tireType,
+      'width': width,
+      'aspect_ratio': aspectRatio,
+      'rim_diameter': rimDiameter,
+      'manufacturer': manufacturer,
+      'model': model,
+      'purchase_date': purchaseDate?.toIso8601String(),
+      'purchase_price': purchasePrice,
+      'production_year': productionYear,
+      'tread_depth': treadDepth,
+      'is_mounted': isMounted ? 1 : 0,
+      'notes': notes,
+    };
+  }
+}

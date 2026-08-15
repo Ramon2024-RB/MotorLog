@@ -76,6 +76,10 @@ class VehicleDetailPage extends ConsumerWidget {
     context.go('/maintenance/${vehicle.id}');
   }
 
+  void _openTires(BuildContext context, Vehicle vehicle) {
+    context.go('/tires/${vehicle.id}');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vehiclesAsync = ref.watch(vehicleProvider);
@@ -308,7 +312,9 @@ class VehicleDetailPage extends ConsumerWidget {
                   icon: Icons.tire_repair,
                   title: 'Reifen',
                   subtitle: 'Reifensätze und Reifenwechsel',
-                  onTap: () {},
+                  onTap: () {
+                    _openTires(context, vehicle);
+                  },
                 ),
 
                 const SizedBox(height: 12),
