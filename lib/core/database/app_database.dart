@@ -6,6 +6,7 @@ import '../../models/fuel_entry.dart';
 import '../../models/maintenance_entry.dart';
 import '../../models/tire_set.dart';
 import '../../models/vehicle.dart';
+import '../../models/vehicle_document.dart';
 
 class AppDatabase {
   AppDatabase._();
@@ -13,7 +14,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const String _databaseName = 'motorlog.db';
-  static const int _databaseVersion = 7;
+  static const int _databaseVersion = 8;
 
   Database? _database;
 
@@ -61,6 +62,7 @@ class AppDatabase {
     await _createExpensesTable(db);
     await _createMaintenanceTable(db);
     await _createTireSetsTable(db);
+    await _createDocumentsTable(db);
   }
 
   Future<void> _createFuelEntriesTable(Database db) async {
@@ -142,6 +144,22 @@ class AppDatabase {
     ''');
   }
 
+  Future<void> _createDocumentsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE vehicle_documents (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        category TEXT NOT NULL,
+        date TEXT NOT NULL,
+        file_path TEXT,
+        notes TEXT,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON DELETE CASCADE
+      )
+    ''');
+  }
+
   Future<void> _upgradeDatabase(
     Database db,
     int oldVersion,
@@ -186,6 +204,10 @@ class AppDatabase {
     if (oldVersion < 7) {
       await _createTireSetsTable(db);
     }
+
+    if (oldVersion < 8) {
+      await _createDocumentsTable(db);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -195,10 +217,7 @@ class AppDatabase {
   Future<List<Vehicle>> getVehicles() async {
     final db = await database;
 
-    final maps = await db.query(
-      'vehicles',
-      orderBy: 'name COLLATE NOCASE ASC',
-    );
+    final maps = await db.query('vehicles', orderBy: 'name COLLATE NOCASE ASC');
 
     return maps.map(Vehicle.fromMap).toList();
   }
@@ -227,21 +246,14 @@ class AppDatabase {
   Future<void> deleteVehicle(String id) async {
     final db = await database;
 
-    await db.delete(
-      'vehicles',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('vehicles', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> setDefaultVehicle(String vehicleId) async {
     final db = await database;
 
     await db.transaction((transaction) async {
-      await transaction.update(
-        'vehicles',
-        {'is_default': 0},
-      );
+      await transaction.update('vehicles', {'is_default': 0});
 
       await transaction.update(
         'vehicles',
@@ -293,11 +305,7 @@ class AppDatabase {
   Future<void> deleteFuelEntry(String id) async {
     final db = await database;
 
-    await db.delete(
-      'fuel_entries',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('fuel_entries', where: 'id = ?', whereArgs: [id]);
   }
 
   // ---------------------------------------------------------------------------
@@ -341,11 +349,7 @@ class AppDatabase {
   Future<void> deleteExpense(String id) async {
     final db = await database;
 
-    await db.delete(
-      'expenses',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
   }
 
   // ---------------------------------------------------------------------------
@@ -391,11 +395,7 @@ class AppDatabase {
   Future<void> deleteMaintenanceEntry(String id) async {
     final db = await database;
 
-    await db.delete(
-      'maintenance_entries',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('maintenance_entries', where: 'id = ?', whereArgs: [id]);
   }
 
   // ---------------------------------------------------------------------------
@@ -439,11 +439,7 @@ class AppDatabase {
   Future<void> deleteTireSet(String id) async {
     final db = await database;
 
-    await db.delete(
-      'tire_sets',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('tire_sets', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> setMountedTireSet({
@@ -467,5 +463,49 @@ class AppDatabase {
         whereArgs: [tireSetId, vehicleId],
       );
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dokumente
+  // ---------------------------------------------------------------------------
+
+  Future<List<VehicleDocument>> getDocuments({String? vehicleId}) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'vehicle_documents',
+      where: vehicleId == null ? null : 'vehicle_id = ?',
+      whereArgs: vehicleId == null ? null : [vehicleId],
+      orderBy: 'date DESC, title COLLATE NOCASE ASC',
+    );
+
+    return maps.map(VehicleDocument.fromMap).toList();
+  }
+
+  Future<void> insertDocument(VehicleDocument document) async {
+    final db = await database;
+
+    await db.insert(
+      'vehicle_documents',
+      document.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateDocument(VehicleDocument document) async {
+    final db = await database;
+
+    await db.update(
+      'vehicle_documents',
+      document.toMap(),
+      where: 'id = ?',
+      whereArgs: [document.id],
+    );
+  }
+
+  Future<void> deleteDocument(String id) async {
+    final db = await database;
+
+    await db.delete('vehicle_documents', where: 'id = ?', whereArgs: [id]);
   }
 }
