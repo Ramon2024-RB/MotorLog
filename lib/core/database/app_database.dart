@@ -14,7 +14,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const String _databaseName = 'motorlog.db';
-  static const int _databaseVersion = 8;
+  static const int _databaseVersion = 9;
 
   Database? _database;
 
@@ -114,6 +114,8 @@ class AppDatabase {
         next_mileage INTEGER,
         next_date TEXT,
         notes TEXT,
+        mileage_advance_notified INTEGER NOT NULL DEFAULT 0,
+        mileage_due_notified INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
           ON DELETE CASCADE
       )
@@ -207,6 +209,20 @@ class AppDatabase {
 
     if (oldVersion < 8) {
       await _createDocumentsTable(db);
+    }
+
+    if (oldVersion < 9) {
+      await db.execute(
+        'ALTER TABLE maintenance_entries '
+        'ADD COLUMN mileage_advance_notified '
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+
+      await db.execute(
+        'ALTER TABLE maintenance_entries '
+        'ADD COLUMN mileage_due_notified '
+        'INTEGER NOT NULL DEFAULT 0',
+      );
     }
   }
 
@@ -389,6 +405,35 @@ class AppDatabase {
       entry.toMap(),
       where: 'id = ?',
       whereArgs: [entry.id],
+    );
+  }
+
+  Future<void> updateMaintenanceMileageNotificationStatus({
+    required String maintenanceId,
+    bool? advanceNotified,
+    bool? dueNotified,
+  }) async {
+    final db = await database;
+
+    final values = <String, Object?>{};
+
+    if (advanceNotified != null) {
+      values['mileage_advance_notified'] = advanceNotified ? 1 : 0;
+    }
+
+    if (dueNotified != null) {
+      values['mileage_due_notified'] = dueNotified ? 1 : 0;
+    }
+
+    if (values.isEmpty) {
+      return;
+    }
+
+    await db.update(
+      'maintenance_entries',
+      values,
+      where: 'id = ?',
+      whereArgs: [maintenanceId],
     );
   }
 

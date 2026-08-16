@@ -10,6 +10,8 @@ class MaintenanceEntry {
     this.notes,
     this.nextMileage,
     this.nextDate,
+    this.mileageAdvanceNotified = false,
+    this.mileageDueNotified = false,
   });
 
   final String id;
@@ -23,6 +25,14 @@ class MaintenanceEntry {
   final int? nextMileage;
   final DateTime? nextDate;
 
+  // Merkt sich, ob die Vorwarnung für die kilometerabhängige
+  // Wartung bereits angezeigt wurde.
+  final bool mileageAdvanceNotified;
+
+  // Merkt sich, ob die Fälligkeitswarnung für die kilometerabhängige
+  // Wartung bereits angezeigt wurde.
+  final bool mileageDueNotified;
+
   Map<String, Object?> toMap() {
     return {
       'id': id,
@@ -35,6 +45,8 @@ class MaintenanceEntry {
       'notes': notes,
       'next_mileage': nextMileage,
       'next_date': nextDate?.toIso8601String(),
+      'mileage_advance_notified': mileageAdvanceNotified ? 1 : 0,
+      'mileage_due_notified': mileageDueNotified ? 1 : 0,
     };
   }
 
@@ -52,6 +64,40 @@ class MaintenanceEntry {
       nextDate: map['next_date'] == null
           ? null
           : DateTime.parse(map['next_date'] as String),
+      mileageAdvanceNotified:
+          (map['mileage_advance_notified'] as int? ?? 0) == 1,
+      mileageDueNotified: (map['mileage_due_notified'] as int? ?? 0) == 1,
+    );
+  }
+
+  MaintenanceEntry copyWith({
+    String? id,
+    String? vehicleId,
+    DateTime? date,
+    String? category,
+    String? title,
+    double? cost,
+    int? mileage,
+    String? notes,
+    int? nextMileage,
+    DateTime? nextDate,
+    bool? mileageAdvanceNotified,
+    bool? mileageDueNotified,
+  }) {
+    return MaintenanceEntry(
+      id: id ?? this.id,
+      vehicleId: vehicleId ?? this.vehicleId,
+      date: date ?? this.date,
+      category: category ?? this.category,
+      title: title ?? this.title,
+      cost: cost ?? this.cost,
+      mileage: mileage ?? this.mileage,
+      notes: notes ?? this.notes,
+      nextMileage: nextMileage ?? this.nextMileage,
+      nextDate: nextDate ?? this.nextDate,
+      mileageAdvanceNotified:
+          mileageAdvanceNotified ?? this.mileageAdvanceNotified,
+      mileageDueNotified: mileageDueNotified ?? this.mileageDueNotified,
     );
   }
 }

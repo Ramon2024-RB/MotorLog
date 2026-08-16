@@ -149,6 +149,15 @@ class NotificationService {
     return _baseNotificationId(maintenanceId) + 1;
   }
 
+  int _mileageAdvanceNotificationId(String maintenanceId) {
+    return (_legacyNotificationId('mileage_advance_$maintenanceId') &
+        0x7fffffff);
+  }
+
+  int _mileageDueNotificationId(String maintenanceId) {
+    return (_legacyNotificationId('mileage_due_$maintenanceId') & 0x7fffffff);
+  }
+
   NotificationDetails _maintenanceNotificationDetails() {
     return const NotificationDetails(
       android: AndroidNotificationDetails(
@@ -256,37 +265,92 @@ class NotificationService {
     debugPrint('MOTORLOG WARTUNGSERINNERUNG');
     debugPrint('Wartung: ${entry.title}');
     debugPrint('Fällig: $dueDate');
-    debugPrint(
-      'Geplante Erinnerungen: '
-      '$scheduledNotifications',
-    );
+    debugPrint('Geplante Erinnerungen: $scheduledNotifications');
     debugPrint('========================================');
 
     await printPendingNotifications();
   }
 
+  Future<void> showMileageAdvanceNotification({
+    required MaintenanceEntry entry,
+    required int currentMileage,
+  }) async {
+    await initialize();
+
+    final nextMileage = entry.nextMileage;
+
+    if (nextMileage == null) {
+      return;
+    }
+
+    final remainingKilometers = nextMileage - currentMileage;
+
+    final body = remainingKilometers > 0
+        ? '${entry.title} steht bald an. Noch $remainingKilometers km bis zur Fälligkeit.'
+        : '${entry.title} steht bald an.';
+
+    await _notifications.show(
+      id: _mileageAdvanceNotificationId(entry.id),
+      title: 'Wartung steht bald an',
+      body: body,
+      notificationDetails: _maintenanceNotificationDetails(),
+      payload: 'maintenance_mileage_advance:${entry.id}',
+    );
+
+    debugPrint('========================================');
+    debugPrint('MOTORLOG KILOMETER-VORWARNUNG');
+    debugPrint('Wartung: ${entry.title}');
+    debugPrint('Aktueller Kilometerstand: $currentMileage');
+    debugPrint('Fällig bei: $nextMileage');
+    debugPrint('Rest: $remainingKilometers km');
+    debugPrint('========================================');
+  }
+
+  Future<void> showMileageDueNotification({
+    required MaintenanceEntry entry,
+    required int currentMileage,
+  }) async {
+    await initialize();
+
+    final nextMileage = entry.nextMileage;
+
+    if (nextMileage == null) {
+      return;
+    }
+
+    final exceededKilometers = currentMileage - nextMileage;
+
+    final body = exceededKilometers > 0
+        ? '${entry.title} ist fällig. Der Wartungsstand wurde um $exceededKilometers km überschritten.'
+        : '${entry.title} ist jetzt fällig.';
+
+    await _notifications.show(
+      id: _mileageDueNotificationId(entry.id),
+      title: 'Wartung fällig',
+      body: body,
+      notificationDetails: _maintenanceNotificationDetails(),
+      payload: 'maintenance_mileage_due:${entry.id}',
+    );
+
+    debugPrint('========================================');
+    debugPrint('MOTORLOG KILOMETER-FÄLLIGKEIT');
+    debugPrint('Wartung: ${entry.title}');
+    debugPrint('Aktueller Kilometerstand: $currentMileage');
+    debugPrint('Fällig bei: $nextMileage');
+    debugPrint('Überschritten: $exceededKilometers km');
+    debugPrint('========================================');
+  }
+
   Future<void> cancelMaintenanceNotification(String maintenanceId) async {
     await initialize();
 
-    // Alte MotorLog-Version:
-    //
-    // Früher hatte jede Wartung nur eine
-    // Benachrichtigung mit dieser ID.
-    //
-    // Diese wird ebenfalls gelöscht, damit nach
-    // dem Update keine alte Erinnerung übrig bleibt.
     await _notifications.cancel(id: _legacyNotificationId(maintenanceId));
 
-    // Neue Erinnerung: 7 Tage vorher.
     await _notifications.cancel(id: _advanceNotificationId(maintenanceId));
 
-    // Neue Erinnerung: am Fälligkeitstag.
     await _notifications.cancel(id: _dueNotificationId(maintenanceId));
 
-    debugPrint(
-      'MotorLog Wartungsbenachrichtigungen gelöscht: '
-      '$maintenanceId',
-    );
+    debugPrint('MotorLog Wartungsbenachrichtigungen gelöscht: $maintenanceId');
   }
 
   Future<void> printPendingNotifications() async {
