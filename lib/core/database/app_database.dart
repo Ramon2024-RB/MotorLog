@@ -14,7 +14,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const String _databaseName = 'motorlog.db';
-  static const int _databaseVersion = 9;
+  static const int _databaseVersion = 10;
 
   Database? _database;
 
@@ -139,6 +139,8 @@ class AppDatabase {
         production_year INTEGER,
         tread_depth REAL,
         is_mounted INTEGER NOT NULL DEFAULT 0,
+        mounted_mileage INTEGER,
+        mounted_date TEXT,
         notes TEXT,
         FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
           ON DELETE CASCADE
@@ -222,6 +224,18 @@ class AppDatabase {
         'ALTER TABLE maintenance_entries '
         'ADD COLUMN mileage_due_notified '
         'INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+
+    if (oldVersion < 10) {
+      await db.execute(
+        'ALTER TABLE tire_sets '
+        'ADD COLUMN mounted_mileage INTEGER',
+      );
+
+      await db.execute(
+        'ALTER TABLE tire_sets '
+        'ADD COLUMN mounted_date TEXT',
       );
     }
   }

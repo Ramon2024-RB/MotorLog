@@ -14,6 +14,8 @@ class TireSet {
     this.purchasePrice,
     this.productionYear,
     this.treadDepth,
+    this.mountedMileage,
+    this.mountedDate,
     this.notes,
   });
 
@@ -51,6 +53,12 @@ class TireSet {
   /// Gibt an, ob dieser Reifensatz aktuell montiert ist.
   final bool isMounted;
 
+  /// Kilometerstand bei der letzten Montage dieses Reifensatzes.
+  final int? mountedMileage;
+
+  /// Datum der letzten Montage dieses Reifensatzes.
+  final DateTime? mountedDate;
+
   final String? notes;
 
   String get tireSize {
@@ -72,6 +80,8 @@ class TireSet {
     int? productionYear,
     double? treadDepth,
     bool? isMounted,
+    int? mountedMileage,
+    DateTime? mountedDate,
     String? notes,
   }) {
     return TireSet(
@@ -89,6 +99,8 @@ class TireSet {
       productionYear: productionYear ?? this.productionYear,
       treadDepth: treadDepth ?? this.treadDepth,
       isMounted: isMounted ?? this.isMounted,
+      mountedMileage: mountedMileage ?? this.mountedMileage,
+      mountedDate: mountedDate ?? this.mountedDate,
       notes: notes ?? this.notes,
     );
   }
@@ -115,6 +127,10 @@ class TireSet {
           ? null
           : (map['tread_depth'] as num).toDouble(),
       isMounted: (map['is_mounted'] as int) == 1,
+      mountedMileage: map['mounted_mileage'] as int?,
+      mountedDate: map['mounted_date'] == null
+          ? null
+          : DateTime.parse(map['mounted_date'] as String),
       notes: map['notes'] as String?,
     );
   }
@@ -135,6 +151,8 @@ class TireSet {
       'production_year': productionYear,
       'tread_depth': treadDepth,
       'is_mounted': isMounted ? 1 : 0,
+      'mounted_mileage': mountedMileage,
+      'mounted_date': mountedDate?.toIso8601String(),
       'notes': notes,
     };
   }

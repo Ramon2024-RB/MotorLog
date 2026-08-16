@@ -44,6 +44,49 @@ class VehicleNotifier extends AsyncNotifier<List<Vehicle>> {
     });
   }
 
+  Future<void> updateMileageIfHigher({
+    required String vehicleId,
+    required int mileage,
+  }) async {
+    final vehicles = await _database.getVehicles();
+
+    Vehicle? vehicle;
+
+    for (final item in vehicles) {
+      if (item.id == vehicleId) {
+        vehicle = item;
+        break;
+      }
+    }
+
+    if (vehicle == null) {
+      return;
+    }
+
+    if (mileage <= vehicle.mileage) {
+      return;
+    }
+
+    final updatedVehicle = Vehicle(
+      id: vehicle.id,
+      name: vehicle.name,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      year: vehicle.year,
+      fuelType: vehicle.fuelType,
+      mileage: mileage,
+      licensePlate: vehicle.licensePlate,
+      vehicleType: vehicle.vehicleType,
+      isDefault: vehicle.isDefault,
+    );
+
+    await _database.updateVehicle(updatedVehicle);
+
+    await _checkMileageMaintenanceNotifications(updatedVehicle);
+
+    state = AsyncData(await _database.getVehicles());
+  }
+
   Future<void> deleteVehicle(String id) async {
     state = const AsyncLoading();
 
@@ -90,10 +133,6 @@ class VehicleNotifier extends AsyncNotifier<List<Vehicle>> {
 
     final remainingKilometers = nextMileage - vehicle.mileage;
 
-    // ---------------------------------------------------------------
-    // Wartung ist bereits fällig oder überschritten.
-    // ---------------------------------------------------------------
-
     if (remainingKilometers <= 0) {
       if (!entry.mileageDueNotified) {
         try {
@@ -108,20 +147,13 @@ class VehicleNotifier extends AsyncNotifier<List<Vehicle>> {
             dueNotified: true,
           );
         } catch (_) {
-          // Wenn die Benachrichtigung nicht angezeigt werden kann,
-          // wird der Status absichtlich nicht gespeichert.
-          //
-          // Dadurch kann MotorLog die Benachrichtigung beim nächsten
-          // Aktualisieren des Kilometerstands erneut versuchen.
+          // Status wird nur gespeichert, wenn die
+          // Benachrichtigung erfolgreich ausgelöst wurde.
         }
       }
 
       return;
     }
-
-    // ---------------------------------------------------------------
-    // Wartung liegt höchstens noch 500 km entfernt.
-    // ---------------------------------------------------------------
 
     if (remainingKilometers <= _maintenanceAdvanceKilometers) {
       if (!entry.mileageAdvanceNotified) {
@@ -136,8 +168,8 @@ class VehicleNotifier extends AsyncNotifier<List<Vehicle>> {
             advanceNotified: true,
           );
         } catch (_) {
-          // Auch hier speichern wir den Status nur dann,
-          // wenn die Benachrichtigung erfolgreich ausgelöst wurde.
+          // Beim nächsten höheren Kilometerstand kann
+          // MotorLog die Benachrichtigung erneut versuchen.
         }
       }
     }

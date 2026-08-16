@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/database/app_database.dart';
 import '../models/maintenance_entry.dart';
 import 'notification_service.dart';
+import 'vehicle_provider.dart';
 
 class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
   final AppDatabase _database = AppDatabase.instance;
@@ -26,7 +27,20 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
       await _notificationService.scheduleMaintenanceNotification(entry);
     } catch (error) {
       // Die Wartung soll auch dann gespeichert bleiben,
-      // wenn das Planen der Benachrichtigung fehlschlägt.
+      // wenn das Planen der Datumsbenachrichtigung fehlschlägt.
+    }
+
+    try {
+      await ref
+          .read(vehicleProvider.notifier)
+          .updateMileageIfHigher(
+            vehicleId: entry.vehicleId,
+            mileage: entry.mileage,
+          );
+    } catch (error) {
+      // Die Wartung soll auch dann gespeichert bleiben,
+      // wenn der Fahrzeug-Kilometerstand nicht automatisch
+      // aktualisiert werden kann.
     }
 
     await reload();
@@ -41,8 +55,21 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
       await _notificationService.scheduleMaintenanceNotification(entry);
     } catch (error) {
       // Die Änderung der Wartung soll auch dann gespeichert
-      // bleiben, wenn die Benachrichtigung nicht aktualisiert
-      // werden kann.
+      // bleiben, wenn die Datumsbenachrichtigung nicht
+      // aktualisiert werden kann.
+    }
+
+    try {
+      await ref
+          .read(vehicleProvider.notifier)
+          .updateMileageIfHigher(
+            vehicleId: entry.vehicleId,
+            mileage: entry.mileage,
+          );
+    } catch (error) {
+      // Die Änderung der Wartung soll auch dann gespeichert
+      // bleiben, wenn der Fahrzeug-Kilometerstand nicht
+      // automatisch aktualisiert werden kann.
     }
 
     await reload();

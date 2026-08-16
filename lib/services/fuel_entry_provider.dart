@@ -2,11 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/database/app_database.dart';
 import '../models/fuel_entry.dart';
+import 'vehicle_provider.dart';
 
 final fuelEntryProvider =
     AsyncNotifierProvider<FuelEntryNotifier, List<FuelEntry>>(
-  FuelEntryNotifier.new,
-);
+      FuelEntryNotifier.new,
+    );
 
 class FuelEntryNotifier extends AsyncNotifier<List<FuelEntry>> {
   final AppDatabase _database = AppDatabase.instance;
@@ -21,6 +22,14 @@ class FuelEntryNotifier extends AsyncNotifier<List<FuelEntry>> {
 
     state = await AsyncValue.guard(() async {
       await _database.insertFuelEntry(entry);
+
+      await ref
+          .read(vehicleProvider.notifier)
+          .updateMileageIfHigher(
+            vehicleId: entry.vehicleId,
+            mileage: entry.mileage,
+          );
+
       return _database.getFuelEntries();
     });
   }
@@ -30,6 +39,14 @@ class FuelEntryNotifier extends AsyncNotifier<List<FuelEntry>> {
 
     state = await AsyncValue.guard(() async {
       await _database.updateFuelEntry(entry);
+
+      await ref
+          .read(vehicleProvider.notifier)
+          .updateMileageIfHigher(
+            vehicleId: entry.vehicleId,
+            mileage: entry.mileage,
+          );
+
       return _database.getFuelEntries();
     });
   }

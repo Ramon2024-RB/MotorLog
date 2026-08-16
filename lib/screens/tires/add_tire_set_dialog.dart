@@ -13,7 +13,11 @@ import '../../widgets/motorlog/motorlog_section.dart';
 import '../../widgets/motorlog/motorlog_text_field.dart';
 
 class AddTireSetDialog extends ConsumerStatefulWidget {
-  const AddTireSetDialog({super.key, this.tireSet, this.initialVehicleId});
+  const AddTireSetDialog({
+    super.key,
+    this.tireSet,
+    this.initialVehicleId,
+  });
 
   final TireSet? tireSet;
   final String? initialVehicleId;
@@ -36,12 +40,14 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
   late final TextEditingController _purchasePriceController;
   late final TextEditingController _productionYearController;
   late final TextEditingController _treadDepthController;
+  late final TextEditingController _mountedMileageController;
   late final TextEditingController _notesController;
 
   String? _selectedVehicleId;
   late String _selectedTireType;
 
   DateTime? _purchaseDate;
+  DateTime? _mountedDate;
 
   bool _isMounted = false;
   bool _isSaving = false;
@@ -61,13 +67,15 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
     final tireSet = widget.tireSet;
 
     _selectedVehicleId = tireSet?.vehicleId ?? widget.initialVehicleId;
-
     _selectedTireType = tireSet?.tireType ?? 'Sommerreifen';
 
     _purchaseDate = tireSet?.purchaseDate;
+    _mountedDate = tireSet?.mountedDate;
     _isMounted = tireSet?.isMounted ?? false;
 
-    _nameController = TextEditingController(text: tireSet?.name ?? '');
+    _nameController = TextEditingController(
+      text: tireSet?.name ?? '',
+    );
 
     _widthController = TextEditingController(
       text: tireSet?.width.toString() ?? '',
@@ -85,7 +93,9 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
       text: tireSet?.manufacturer ?? '',
     );
 
-    _modelController = TextEditingController(text: tireSet?.model ?? '');
+    _modelController = TextEditingController(
+      text: tireSet?.model ?? '',
+    );
 
     _purchasePriceController = TextEditingController(
       text: tireSet?.purchasePrice == null
@@ -103,7 +113,13 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
           : tireSet!.treadDepth!.toStringAsFixed(1).replaceAll('.', ','),
     );
 
-    _notesController = TextEditingController(text: tireSet?.notes ?? '');
+    _mountedMileageController = TextEditingController(
+      text: tireSet?.mountedMileage?.toString() ?? '',
+    );
+
+    _notesController = TextEditingController(
+      text: tireSet?.notes ?? '',
+    );
   }
 
   @override
@@ -117,13 +133,16 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
     _purchasePriceController.dispose();
     _productionYearController.dispose();
     _treadDepthController.dispose();
+    _mountedMileageController.dispose();
     _notesController.dispose();
 
     super.dispose();
   }
 
   double? _parseDecimal(String value) {
-    return double.tryParse(value.trim().replaceAll(',', '.'));
+    return double.tryParse(
+      value.trim().replaceAll(',', '.'),
+    );
   }
 
   void _setInitialVehicle(List<Vehicle> vehicles) {
@@ -131,7 +150,9 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
       return;
     }
 
-    final defaultVehicles = vehicles.where((vehicle) => vehicle.isDefault);
+    final defaultVehicles = vehicles.where(
+      (vehicle) => vehicle.isDefault,
+    );
 
     if (defaultVehicles.isNotEmpty) {
       _selectedVehicleId = defaultVehicles.first.id;
@@ -157,6 +178,23 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
     }
   }
 
+  Future<void> _selectMountedDate() async {
+    final today = DateUtils.dateOnly(DateTime.now());
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: _mountedDate ?? today,
+      firstDate: DateTime(1980),
+      lastDate: today,
+    );
+
+    if (selectedDate != null && mounted) {
+      setState(() {
+        _mountedDate = selectedDate;
+      });
+    }
+  }
+
   Future<void> _saveTireSet() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -164,16 +202,25 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
 
     if (_selectedVehicleId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte ein Fahrzeug auswählen.')),
+        const SnackBar(
+          content: Text('Bitte ein Fahrzeug auswählen.'),
+        ),
       );
+
       return;
     }
 
-    final width = int.tryParse(_widthController.text.trim());
+    final width = int.tryParse(
+      _widthController.text.trim(),
+    );
 
-    final aspectRatio = int.tryParse(_aspectRatioController.text.trim());
+    final aspectRatio = int.tryParse(
+      _aspectRatioController.text.trim(),
+    );
 
-    final rimDiameter = int.tryParse(_rimDiameterController.text.trim());
+    final rimDiameter = int.tryParse(
+      _rimDiameterController.text.trim(),
+    );
 
     final purchasePriceText = _purchasePriceController.text.trim();
 
@@ -193,6 +240,12 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
         ? null
         : _parseDecimal(treadDepthText);
 
+    final mountedMileageText = _mountedMileageController.text.trim();
+
+    final mountedMileage = mountedMileageText.isEmpty
+        ? null
+        : int.tryParse(mountedMileageText);
+
     if (width == null || aspectRatio == null || rimDiameter == null) {
       return;
     }
@@ -209,42 +262,86 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
       return;
     }
 
+    if (_isMounted && mountedMileage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Bitte den Kilometerstand bei der Montage eingeben.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if (_isMounted && _mountedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Bitte das Montagedatum auswählen.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });
 
-    final tireSet = TireSet(
-      id: widget.tireSet?.id ?? const Uuid().v4(),
-      vehicleId: _selectedVehicleId!,
-      name: _nameController.text.trim(),
-      tireType: _selectedTireType,
-      width: width,
-      aspectRatio: aspectRatio,
-      rimDiameter: rimDiameter,
-      manufacturer: _manufacturerController.text.trim().isEmpty
-          ? null
-          : _manufacturerController.text.trim(),
-      model: _modelController.text.trim().isEmpty
-          ? null
-          : _modelController.text.trim(),
-      purchaseDate: _purchaseDate,
-      purchasePrice: purchasePrice,
-      productionYear: productionYear,
-      treadDepth: treadDepth,
-      isMounted: _isMounted,
-      notes: _notesController.text.trim().isEmpty
-          ? null
-          : _notesController.text.trim(),
-    );
+    try {
+      final tireSet = TireSet(
+        id: widget.tireSet?.id ?? const Uuid().v4(),
+        vehicleId: _selectedVehicleId!,
+        name: _nameController.text.trim(),
+        tireType: _selectedTireType,
+        width: width,
+        aspectRatio: aspectRatio,
+        rimDiameter: rimDiameter,
+        manufacturer: _manufacturerController.text.trim().isEmpty
+            ? null
+            : _manufacturerController.text.trim(),
+        model: _modelController.text.trim().isEmpty
+            ? null
+            : _modelController.text.trim(),
+        purchaseDate: _purchaseDate,
+        purchasePrice: purchasePrice,
+        productionYear: productionYear,
+        treadDepth: treadDepth,
+        isMounted: _isMounted,
+        mountedMileage: _isMounted ? mountedMileage : null,
+        mountedDate: _isMounted ? _mountedDate : null,
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
+      );
 
-    if (_isEditing) {
-      await ref.read(tireProvider.notifier).updateTireSet(tireSet);
-    } else {
-      await ref.read(tireProvider.notifier).addTireSet(tireSet);
-    }
+      if (_isEditing) {
+        await ref.read(tireProvider.notifier).updateTireSet(tireSet);
+      } else {
+        await ref.read(tireProvider.notifier).addTireSet(tireSet);
+      }
 
-    if (mounted) {
-      Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Reifensatz konnte nicht gespeichert werden: $error',
+          ),
+        ),
+      );
     }
   }
 
@@ -276,10 +373,14 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            _isEditing ? 'Reifensatz bearbeiten' : 'Reifensatz hinzufügen',
+            _isEditing
+                ? 'Reifensatz bearbeiten'
+                : 'Reifensatz hinzufügen',
           ),
           leading: IconButton(
-            onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+            onPressed: _isSaving
+                ? null
+                : () => Navigator.of(context).pop(),
             icon: const Icon(Icons.close),
           ),
           actions: [
@@ -289,7 +390,9 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
                     )
                   : const Text('Speichern'),
             ),
@@ -297,7 +400,9 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
         ),
         body: vehiclesAsync.when(
           loading: () {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
           },
           error: (error, stackTrace) {
             return Center(
@@ -332,14 +437,20 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
             return Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.only(top: 8, bottom: 32),
+                padding: const EdgeInsets.only(
+                  top: 8,
+                  bottom: 32,
+                ),
                 children: [
                   MotorLogSection(
                     title: 'Fahrzeug',
-                    subtitle: 'Wähle das Fahrzeug für diesen Reifensatz aus.',
+                    subtitle:
+                        'Wähle das Fahrzeug für diesen Reifensatz aus.',
                     child: Column(
                       children: [
-                        _SelectedTireVehicleCard(vehicle: selectedVehicle),
+                        _SelectedTireVehicleCard(
+                          vehicle: selectedVehicle,
+                        ),
                         const SizedBox(height: 14),
                         MotorLogDropdown<String>(
                           value: _selectedVehicleId,
@@ -356,6 +467,18 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                               : (value) {
                                   setState(() {
                                     _selectedVehicleId = value;
+
+                                    final vehicle = vehicles.firstWhere(
+                                      (vehicle) => vehicle.id == value,
+                                    );
+
+                                    if (_mountedMileageController
+                                        .text
+                                        .trim()
+                                        .isEmpty) {
+                                      _mountedMileageController.text =
+                                          vehicle.mileage.toString();
+                                    }
                                   });
                                 },
                         ),
@@ -377,7 +500,8 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                             icon: Icons.edit_outlined,
                             textInputAction: TextInputAction.next,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              if (value == null ||
+                                  value.trim().isEmpty) {
                                 return 'Pflichtfeld';
                               }
 
@@ -388,7 +512,9 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                           MotorLogDropdown<String>(
                             value: _selectedTireType,
                             label: 'Reifenart',
-                            icon: _tireTypeIcon(_selectedTireType),
+                            icon: _tireTypeIcon(
+                              _selectedTireType,
+                            ),
                             items: _tireTypes.map((type) {
                               return DropdownMenuItem<String>(
                                 value: type,
@@ -426,11 +552,14 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                             keyboardType: TextInputType.number,
                             textInputAction: TextInputAction.next,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              if (value == null ||
+                                  value.trim().isEmpty) {
                                 return 'Pflichtfeld';
                               }
 
-                              final width = int.tryParse(value.trim());
+                              final width = int.tryParse(
+                                value.trim(),
+                              );
 
                               if (width == null || width <= 0) {
                                 return 'Bitte eine gültige Reifenbreite eingeben';
@@ -449,13 +578,17 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                             keyboardType: TextInputType.number,
                             textInputAction: TextInputAction.next,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              if (value == null ||
+                                  value.trim().isEmpty) {
                                 return 'Pflichtfeld';
                               }
 
-                              final aspectRatio = int.tryParse(value.trim());
+                              final aspectRatio = int.tryParse(
+                                value.trim(),
+                              );
 
-                              if (aspectRatio == null || aspectRatio <= 0) {
+                              if (aspectRatio == null ||
+                                  aspectRatio <= 0) {
                                 return 'Bitte einen gültigen Querschnitt eingeben';
                               }
 
@@ -472,13 +605,17 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                             keyboardType: TextInputType.number,
                             textInputAction: TextInputAction.next,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              if (value == null ||
+                                  value.trim().isEmpty) {
                                 return 'Pflichtfeld';
                               }
 
-                              final diameter = int.tryParse(value.trim());
+                              final diameter = int.tryParse(
+                                value.trim(),
+                              );
 
-                              if (diameter == null || diameter <= 0) {
+                              if (diameter == null ||
+                                  diameter <= 0) {
                                 return 'Bitte einen gültigen Felgendurchmesser eingeben';
                               }
 
@@ -492,7 +629,8 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
 
                   MotorLogSection(
                     title: 'Reifen',
-                    subtitle: 'Hersteller und Modell sind optional.',
+                    subtitle:
+                        'Hersteller und Modell sind optional.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: Column(
@@ -508,7 +646,8 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                           MotorLogTextField(
                             controller: _modelController,
                             label: 'Modell',
-                            hint: 'Zum Beispiel: WinterContact TS 870',
+                            hint:
+                                'Zum Beispiel: WinterContact TS 870',
                             icon: Icons.label_outline,
                             textInputAction: TextInputAction.next,
                           ),
@@ -521,13 +660,17 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                             keyboardType: TextInputType.number,
                             textInputAction: TextInputAction.next,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              if (value == null ||
+                                  value.trim().isEmpty) {
                                 return null;
                               }
 
-                              final year = int.tryParse(value.trim());
+                              final year = int.tryParse(
+                                value.trim(),
+                              );
 
-                              final currentYear = DateTime.now().year;
+                              final currentYear =
+                                  DateTime.now().year;
 
                               if (year == null ||
                                   year < 1980 ||
@@ -545,18 +688,22 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                             hint: '8,0',
                             suffixText: 'mm',
                             icon: Icons.height_outlined,
-                            keyboardType: const TextInputType.numberWithOptions(
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
                             textInputAction: TextInputAction.next,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              if (value == null ||
+                                  value.trim().isEmpty) {
                                 return null;
                               }
 
                               final depth = _parseDecimal(value);
 
-                              if (depth == null || depth < 0 || depth > 30) {
+                              if (depth == null ||
+                                  depth < 0 ||
+                                  depth > 30) {
                                 return 'Bitte eine gültige Profiltiefe eingeben';
                               }
 
@@ -570,13 +717,15 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
 
                   MotorLogSection(
                     title: 'Kauf',
-                    subtitle: 'Kaufdatum und Preis sind optional.',
+                    subtitle:
+                        'Kaufdatum und Preis sind optional.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: Column(
                         children: [
                           InkWell(
-                            onTap: _isSaving ? null : _selectPurchaseDate,
+                            onTap:
+                                _isSaving ? null : _selectPurchaseDate,
                             borderRadius: BorderRadius.circular(18),
                             child: InputDecorator(
                               decoration: InputDecoration(
@@ -585,59 +734,72 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                                   Icons.calendar_today_outlined,
                                 ),
                                 filled: true,
-                                fillColor: Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerLowest,
+                                fillColor: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerLowest,
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
+                                  borderRadius:
+                                      BorderRadius.circular(18),
                                   borderSide: BorderSide.none,
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
+                                enabledBorder:
+                                    OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(18),
                                   borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outlineVariant,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant,
                                   ),
                                 ),
                                 suffixIcon: _purchaseDate == null
                                     ? null
                                     : IconButton(
-                                        tooltip: 'Datum entfernen',
+                                        tooltip:
+                                            'Datum entfernen',
                                         onPressed: _isSaving
                                             ? null
                                             : () {
                                                 setState(() {
-                                                  _purchaseDate = null;
+                                                  _purchaseDate =
+                                                      null;
                                                 });
                                               },
-                                        icon: const Icon(Icons.close),
+                                        icon: const Icon(
+                                          Icons.close,
+                                        ),
                                       ),
                               ),
                               child: Text(
                                 _purchaseDate == null
                                     ? 'Kein Datum ausgewählt'
-                                    : _formatDate(_purchaseDate!),
+                                    : _formatDate(
+                                        _purchaseDate!,
+                                      ),
                               ),
                             ),
                           ),
                           const SizedBox(height: 16),
                           MotorLogTextField(
-                            controller: _purchasePriceController,
+                            controller:
+                                _purchasePriceController,
                             label: 'Kaufpreis',
                             hint: '650,00',
                             suffixText: '€',
                             icon: Icons.euro,
-                            keyboardType: const TextInputType.numberWithOptions(
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
                             textInputAction: TextInputAction.next,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              if (value == null ||
+                                  value.trim().isEmpty) {
                                 return null;
                               }
 
-                              final price = _parseDecimal(value);
+                              final price =
+                                  _parseDecimal(value);
 
                               if (price == null || price < 0) {
                                 return 'Bitte einen gültigen Kaufpreis eingeben';
@@ -653,40 +815,174 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
 
                   MotorLogSection(
                     title: 'Status',
-                    subtitle: 'Ist dieser Reifensatz aktuell montiert?',
+                    subtitle:
+                        'Ist dieser Reifensatz aktuell montiert?',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
-                      child: SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Aktuell montiert',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          _isMounted
-                              ? 'Dieser Reifensatz ist aktuell am Fahrzeug montiert.'
-                              : 'Dieser Reifensatz ist aktuell eingelagert.',
-                        ),
-                        secondary: Icon(
-                          _isMounted
-                              ? Icons.check_circle_outline
-                              : Icons.inventory_2_outlined,
-                        ),
-                        value: _isMounted,
-                        onChanged: _isSaving
-                            ? null
-                            : (value) {
-                                setState(() {
-                                  _isMounted = value;
-                                });
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Aktuell montiert',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              _isMounted
+                                  ? 'Dieser Reifensatz ist aktuell am Fahrzeug montiert.'
+                                  : 'Dieser Reifensatz ist aktuell eingelagert.',
+                            ),
+                            secondary: Icon(
+                              _isMounted
+                                  ? Icons.check_circle_outline
+                                  : Icons.inventory_2_outlined,
+                            ),
+                            value: _isMounted,
+                            onChanged: _isSaving
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      _isMounted = value;
+
+                                      if (value) {
+                                        _mountedDate ??=
+                                            DateUtils.dateOnly(
+                                          DateTime.now(),
+                                        );
+
+                                        if (_mountedMileageController
+                                            .text
+                                            .trim()
+                                            .isEmpty) {
+                                          _mountedMileageController
+                                                  .text =
+                                              selectedVehicle
+                                                  .mileage
+                                                  .toString();
+                                        }
+                                      }
+                                    });
+                                  },
+                          ),
+
+                          if (_isMounted) ...[
+                            const SizedBox(height: 16),
+
+                            InkWell(
+                              onTap: _isSaving
+                                  ? null
+                                  : _selectMountedDate,
+                              borderRadius:
+                                  BorderRadius.circular(18),
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Montagedatum',
+                                  prefixIcon: const Icon(
+                                    Icons
+                                        .calendar_today_outlined,
+                                  ),
+                                  filled: true,
+                                  fillColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerLowest,
+                                  border: OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(
+                                      18,
+                                    ),
+                                    borderSide:
+                                        BorderSide.none,
+                                  ),
+                                  enabledBorder:
+                                      OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(
+                                      18,
+                                    ),
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outlineVariant,
+                                    ),
+                                  ),
+                                ),
+                                child: Text(
+                                  _mountedDate == null
+                                      ? 'Datum auswählen'
+                                      : _formatDate(
+                                          _mountedDate!,
+                                        ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            MotorLogTextField(
+                              controller:
+                                  _mountedMileageController,
+                              label:
+                                  'Kilometerstand bei Montage',
+                              hint: selectedVehicle.mileage
+                                  .toString(),
+                              suffixText: 'km',
+                              icon: Icons.speed,
+                              keyboardType:
+                                  TextInputType.number,
+                              textInputAction:
+                                  TextInputAction.done,
+                              validator: (value) {
+                                if (!_isMounted) {
+                                  return null;
+                                }
+
+                                if (value == null ||
+                                    value.trim().isEmpty) {
+                                  return 'Bitte Kilometerstand eingeben';
+                                }
+
+                                final mileage = int.tryParse(
+                                  value.trim(),
+                                );
+
+                                if (mileage == null ||
+                                    mileage < 0) {
+                                  return 'Bitte einen gültigen Kilometerstand eingeben';
+                                }
+
+                                return null;
                               },
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Aktueller Fahrzeugstand: '
+                                '${selectedVehicle.mileage} km',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
 
                   MotorLogSection(
                     title: 'Notizen',
-                    subtitle: 'Zusätzliche Informationen zum Reifensatz.',
+                    subtitle:
+                        'Zusätzliche Informationen zum Reifensatz.',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: MotorLogTextField(
@@ -702,14 +998,16 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
                   ),
 
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    padding:
+                        const EdgeInsets.fromLTRB(20, 12, 20, 12),
                     child: MotorLogButton(
                       label: _isEditing
                           ? 'Änderungen speichern'
                           : 'Reifensatz speichern',
                       icon: Icons.save_outlined,
                       isLoading: _isSaving,
-                      onPressed: _isSaving ? null : _saveTireSet,
+                      onPressed:
+                          _isSaving ? null : _saveTireSet,
                     ),
                   ),
                 ],
@@ -723,7 +1021,9 @@ class _AddTireSetDialogState extends ConsumerState<AddTireSetDialog> {
 }
 
 class _SelectedTireVehicleCard extends StatelessWidget {
-  const _SelectedTireVehicleCard({required this.vehicle});
+  const _SelectedTireVehicleCard({
+    required this.vehicle,
+  });
 
   final Vehicle vehicle;
 
@@ -772,12 +1072,17 @@ class _SelectedTireVehicleCard extends StatelessWidget {
                 children: [
                   Text(
                     vehicle.name,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   const SizedBox(height: 4),
-                  Text('${vehicle.brand} ${vehicle.model}'),
+                  Text(
+                    '${vehicle.brand} ${vehicle.model}',
+                  ),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -788,7 +1093,8 @@ class _SelectedTireVehicleCard extends StatelessWidget {
                         label: vehicle.vehicleType,
                       ),
                       _VehicleInfoChip(
-                        icon: Icons.local_gas_station_outlined,
+                        icon:
+                            Icons.local_gas_station_outlined,
                         label: vehicle.fuelType,
                       ),
                       _VehicleInfoChip(
@@ -808,7 +1114,10 @@ class _SelectedTireVehicleCard extends StatelessWidget {
 }
 
 class _VehicleInfoChip extends StatelessWidget {
-  const _VehicleInfoChip({required this.icon, required this.label});
+  const _VehicleInfoChip({
+    required this.icon,
+    required this.label,
+  });
 
   final IconData icon;
   final String label;
@@ -816,17 +1125,31 @@ class _VehicleInfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
+        color: Theme.of(context)
+            .colorScheme
+            .surface
+            .withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15),
+          Icon(
+            icon,
+            size: 15,
+          ),
           const SizedBox(width: 5),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
