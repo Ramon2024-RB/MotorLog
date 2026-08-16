@@ -140,41 +140,34 @@ class TireNotifier extends AsyncNotifier<List<TireSet>> {
     await reload();
   }
 
-  /// Berechnet die gesamte Laufleistung eines Reifensatzes.
-  ///
-  /// Dabei werden alle bereits abgeschlossenen Montagezeiträume
-  /// aus der Reifenwechsel-Historie berücksichtigt.
-  ///
-  /// Falls der Reifensatz aktuell montiert ist, werden zusätzlich
-  /// die seit der aktuellen Montage gefahrenen Kilometer addiert.
+  Future<List<TireMountHistory>> getTireMountHistory({
+    required String tireSetId,
+  }) async {
+    return _database.getTireMountHistory(tireSetId: tireSetId);
+  }
+
   Future<int> getTotalTireDistance({required TireSet tireSet}) async {
-    var totalDistance = await _database.getCompletedTireDistance(tireSet.id);
-
-    if (!tireSet.isMounted) {
-      return totalDistance;
-    }
-
-    final activeMount = await _database.getActiveTireMount(
-      vehicleId: tireSet.vehicleId,
+    final completedDistance = await _database.getCompletedTireDistance(
+      tireSet.id,
     );
 
-    if (activeMount == null || activeMount.tireSetId != tireSet.id) {
-      return totalDistance;
+    if (!tireSet.isMounted || tireSet.mountedMileage == null) {
+      return completedDistance;
     }
 
     final vehicle = await _findVehicle(tireSet.vehicleId);
 
     if (vehicle == null) {
-      return totalDistance;
+      return completedDistance;
     }
 
-    final currentDistance = vehicle.mileage - activeMount.mountedMileage;
+    final activeDistance = vehicle.mileage - tireSet.mountedMileage!;
 
-    if (currentDistance > 0) {
-      totalDistance += currentDistance;
+    if (activeDistance <= 0) {
+      return completedDistance;
     }
 
-    return totalDistance;
+    return completedDistance + activeDistance;
   }
 
   Future<void> _mountTireSet({
