@@ -84,6 +84,10 @@ class VehicleDetailPage extends ConsumerWidget {
     context.go('/documents/${vehicle.id}');
   }
 
+  void _openStatistics(BuildContext context, Vehicle vehicle) {
+    context.go('/statistics/${vehicle.id}');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vehiclesAsync = ref.watch(vehicleProvider);
@@ -141,6 +145,10 @@ class VehicleDetailPage extends ConsumerWidget {
             );
           }
 
+          // -------------------------------------------------------------------
+          // Tankvorgänge des Fahrzeugs
+          // -------------------------------------------------------------------
+
           final allFuelEntries =
               fuelEntriesAsync.asData?.value ?? <FuelEntry>[];
 
@@ -150,9 +158,9 @@ class VehicleDetailPage extends ConsumerWidget {
                   .toList()
                 ..sort((first, second) => first.date.compareTo(second.date));
 
-          final vehicleStatistics = calculateVehicleStatistics(
-            vehicleFuelEntries,
-          );
+          // -------------------------------------------------------------------
+          // Sonstige Kosten des Fahrzeugs
+          // -------------------------------------------------------------------
 
           final allExpenses = expensesAsync.asData?.value ?? <Expense>[];
 
@@ -160,12 +168,9 @@ class VehicleDetailPage extends ConsumerWidget {
               .where((expense) => expense.vehicleId == vehicle.id)
               .toList();
 
-          final totalExpenses = vehicleExpenses.fold<double>(
-            0,
-            (sum, expense) => sum + expense.amount,
-          );
-
-          final totalVehicleCosts = vehicleStatistics.totalCost + totalExpenses;
+          // -------------------------------------------------------------------
+          // Wartungen des Fahrzeugs
+          // -------------------------------------------------------------------
 
           final allMaintenanceEntries =
               maintenanceAsync.asData?.value ?? <MaintenanceEntry>[];
@@ -173,6 +178,16 @@ class VehicleDetailPage extends ConsumerWidget {
           final vehicleMaintenanceEntries = allMaintenanceEntries
               .where((entry) => entry.vehicleId == vehicle.id)
               .toList();
+
+          // -------------------------------------------------------------------
+          // Zentrale Fahrzeugstatistik
+          // -------------------------------------------------------------------
+
+          final vehicleStatistics = calculateVehicleStatistics(
+            fuelEntries: vehicleFuelEntries,
+            expenses: vehicleExpenses,
+            maintenanceEntries: vehicleMaintenanceEntries,
+          );
 
           final latestFuelEntry = vehicleFuelEntries.isEmpty
               ? null
@@ -220,12 +235,13 @@ class VehicleDetailPage extends ConsumerWidget {
                     _DetailTile(
                       icon: Icons.euro,
                       title: 'Gesamtkosten',
-                      value: '${_formatDecimal(totalVehicleCosts, 2)} €',
+                      value:
+                          '${_formatDecimal(vehicleStatistics.totalVehicleCost, 2)} €',
                     ),
                     _DetailTile(
                       icon: Icons.build_outlined,
                       title: 'Wartungen',
-                      value: vehicleMaintenanceEntries.length.toString(),
+                      value: vehicleStatistics.maintenanceEntries.toString(),
                     ),
                     _DetailTile(
                       icon: Icons.local_gas_station_outlined,
@@ -285,7 +301,8 @@ class VehicleDetailPage extends ConsumerWidget {
                 _MenuCard(
                   icon: Icons.receipt_long_outlined,
                   title: 'Kosten',
-                  subtitle: '${vehicleExpenses.length} Ausgaben gespeichert',
+                  subtitle:
+                      '${vehicleStatistics.expenses} Ausgaben gespeichert',
                   onTap: () {
                     _openExpenses(context, vehicle);
                   },
@@ -297,7 +314,8 @@ class VehicleDetailPage extends ConsumerWidget {
                   icon: Icons.build_outlined,
                   title: 'Wartungen',
                   subtitle:
-                      '${vehicleMaintenanceEntries.length} Wartungen gespeichert',
+                      '${vehicleStatistics.maintenanceEntries} '
+                      'Wartungen gespeichert',
                   onTap: () {
                     _openMaintenance(context, vehicle);
                   },
@@ -322,6 +340,17 @@ class VehicleDetailPage extends ConsumerWidget {
                   subtitle: 'Rechnungen und Fahrzeugunterlagen',
                   onTap: () {
                     _openDocuments(context, vehicle);
+                  },
+                ),
+
+                const SizedBox(height: 10),
+
+                _MenuCard(
+                  icon: Icons.query_stats,
+                  title: 'Statistiken',
+                  subtitle: 'Verbrauch, Kosten und Auswertungen',
+                  onTap: () {
+                    _openStatistics(context, vehicle);
                   },
                 ),
               ],
@@ -635,6 +664,7 @@ class _LatestFuelCard extends StatelessWidget {
               ),
 
               const SizedBox(width: 6),
+
               const Icon(Icons.chevron_right),
             ],
           ),
@@ -657,7 +687,8 @@ class _EmptyFuelCard extends StatelessWidget {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Für dieses Fahrzeug wurde noch kein Tankvorgang gespeichert.',
+              'Für dieses Fahrzeug wurde noch kein '
+              'Tankvorgang gespeichert.',
             ),
           ),
         ],
@@ -726,6 +757,7 @@ class _MenuCard extends StatelessWidget {
               ),
 
               const SizedBox(width: 6),
+
               const Icon(Icons.chevron_right, size: 21),
             ],
           ),
