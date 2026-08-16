@@ -16,6 +16,7 @@ class TireSet {
     this.treadDepth,
     this.mountedMileage,
     this.mountedDate,
+    this.totalMileage = 0,
     this.notes,
   });
 
@@ -54,10 +55,26 @@ class TireSet {
   final bool isMounted;
 
   /// Kilometerstand bei der letzten Montage dieses Reifensatzes.
+  ///
+  /// Dieser Wert wird benötigt, um beim nächsten Reifenwechsel
+  /// zu berechnen, wie viele Kilometer mit diesem Reifensatz
+  /// gefahren wurden.
   final int? mountedMileage;
 
   /// Datum der letzten Montage dieses Reifensatzes.
   final DateTime? mountedDate;
+
+  /// Gesamte bisher mit diesem Reifensatz gefahrene Strecke.
+  ///
+  /// Beispiel:
+  /// Sommerreifen:
+  /// 99.000 -> 107.000 km = 8.000 km
+  ///
+  /// Später erneut montiert:
+  /// 112.000 -> 118.000 km = 6.000 km
+  ///
+  /// totalMileage = 14.000 km
+  final int totalMileage;
 
   final String? notes;
 
@@ -82,6 +99,7 @@ class TireSet {
     bool? isMounted,
     int? mountedMileage,
     DateTime? mountedDate,
+    int? totalMileage,
     String? notes,
   }) {
     return TireSet(
@@ -101,6 +119,7 @@ class TireSet {
       isMounted: isMounted ?? this.isMounted,
       mountedMileage: mountedMileage ?? this.mountedMileage,
       mountedDate: mountedDate ?? this.mountedDate,
+      totalMileage: totalMileage ?? this.totalMileage,
       notes: notes ?? this.notes,
     );
   }
@@ -131,6 +150,7 @@ class TireSet {
       mountedDate: map['mounted_date'] == null
           ? null
           : DateTime.parse(map['mounted_date'] as String),
+      totalMileage: map['total_mileage'] as int? ?? 0,
       notes: map['notes'] as String?,
     );
   }
@@ -153,6 +173,7 @@ class TireSet {
       'is_mounted': isMounted ? 1 : 0,
       'mounted_mileage': mountedMileage,
       'mounted_date': mountedDate?.toIso8601String(),
+      'total_mileage': totalMileage,
       'notes': notes,
     };
   }

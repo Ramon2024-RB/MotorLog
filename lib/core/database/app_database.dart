@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../models/expense.dart';
 import '../../models/fuel_entry.dart';
 import '../../models/maintenance_entry.dart';
+import '../../models/tire_mount_history.dart';
 import '../../models/tire_set.dart';
 import '../../models/vehicle.dart';
 import '../../models/vehicle_document.dart';
@@ -14,7 +15,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const String _databaseName = 'motorlog.db';
-  static const int _databaseVersion = 10;
+  static const int _databaseVersion = 12;
 
   Database? _database;
 
@@ -63,6 +64,7 @@ class AppDatabase {
     await _createMaintenanceTable(db);
     await _createTireSetsTable(db);
     await _createDocumentsTable(db);
+    await _createTireMountHistoryTable(db);
   }
 
   Future<void> _createFuelEntriesTable(Database db) async {
@@ -141,6 +143,7 @@ class AppDatabase {
         is_mounted INTEGER NOT NULL DEFAULT 0,
         mounted_mileage INTEGER,
         mounted_date TEXT,
+        total_mileage INTEGER NOT NULL DEFAULT 0,
         notes TEXT,
         FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
           ON DELETE CASCADE
@@ -159,6 +162,24 @@ class AppDatabase {
         file_path TEXT,
         notes TEXT,
         FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _createTireMountHistoryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE tire_mount_history (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        tire_set_id TEXT NOT NULL,
+        mounted_date TEXT NOT NULL,
+        mounted_mileage INTEGER NOT NULL,
+        unmounted_date TEXT,
+        unmounted_mileage INTEGER,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (tire_set_id) REFERENCES tire_sets (id)
           ON DELETE CASCADE
       )
     ''');
@@ -236,6 +257,17 @@ class AppDatabase {
       await db.execute(
         'ALTER TABLE tire_sets '
         'ADD COLUMN mounted_date TEXT',
+      );
+    }
+
+    if (oldVersion < 11) {
+      await _createTireMountHistoryTable(db);
+    }
+
+    if (oldVersion < 12) {
+      await db.execute(
+        'ALTER TABLE tire_sets '
+        'ADD COLUMN total_mileage INTEGER NOT NULL DEFAULT 0',
       );
     }
   }
@@ -522,6 +554,102 @@ class AppDatabase {
         whereArgs: [tireSetId, vehicleId],
       );
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reifenwechsel-Historie
+  // ---------------------------------------------------------------------------
+
+  Future<List<TireMountHistory>> getTireMountHistory({
+    String? vehicleId,
+    String? tireSetId,
+  }) async {
+    final db = await database;
+
+    String? where;
+    List<Object?>? whereArgs;
+
+    if (vehicleId != null && tireSetId != null) {
+      where = 'vehicle_id = ? AND tire_set_id = ?';
+      whereArgs = [vehicleId, tireSetId];
+    } else if (vehicleId != null) {
+      where = 'vehicle_id = ?';
+      whereArgs = [vehicleId];
+    } else if (tireSetId != null) {
+      where = 'tire_set_id = ?';
+      whereArgs = [tireSetId];
+    }
+
+    final maps = await db.query(
+      'tire_mount_history',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'mounted_date DESC, mounted_mileage DESC',
+    );
+
+    return maps.map(TireMountHistory.fromMap).toList();
+  }
+
+  Future<TireMountHistory?> getActiveTireMount({
+    required String vehicleId,
+  }) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'tire_mount_history',
+      where:
+          'vehicle_id = ? '
+          'AND unmounted_date IS NULL '
+          'AND unmounted_mileage IS NULL',
+      whereArgs: [vehicleId],
+      orderBy: 'mounted_date DESC',
+      limit: 1,
+    );
+
+    if (maps.isEmpty) {
+      return null;
+    }
+
+    return TireMountHistory.fromMap(maps.first);
+  }
+
+  Future<void> insertTireMountHistory(TireMountHistory history) async {
+    final db = await database;
+
+    await db.insert(
+      'tire_mount_history',
+      history.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateTireMountHistory(TireMountHistory history) async {
+    final db = await database;
+
+    await db.update(
+      'tire_mount_history',
+      history.toMap(),
+      where: 'id = ?',
+      whereArgs: [history.id],
+    );
+  }
+
+  Future<void> deleteTireMountHistory(String id) async {
+    final db = await database;
+
+    await db.delete('tire_mount_history', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> getCompletedTireDistance(String tireSetId) async {
+    final history = await getTireMountHistory(tireSetId: tireSetId);
+
+    var totalDistance = 0;
+
+    for (final entry in history) {
+      totalDistance += entry.completedDistance ?? 0;
+    }
+
+    return totalDistance;
   }
 
   // ---------------------------------------------------------------------------

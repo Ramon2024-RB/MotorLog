@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/tire_set.dart';
+import '../../models/vehicle.dart';
 import '../../services/tire_provider.dart';
+import '../../services/vehicle_provider.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
 import 'add_tire_set_dialog.dart';
 
@@ -72,38 +74,70 @@ class TiresPage extends ConsumerWidget {
       return;
     }
 
-    final shouldSetMounted = await showDialog<bool>(
+    final vehicles = ref.read(vehicleProvider).value;
+
+    if (vehicles == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fahrzeugdaten sind noch nicht verfügbar.'),
+        ),
+      );
+
+      return;
+    }
+
+    Vehicle? vehicle;
+
+    for (final item in vehicles) {
+      if (item.id == vehicleId) {
+        vehicle = item;
+        break;
+      }
+    }
+
+    if (vehicle == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fahrzeug wurde nicht gefunden.')),
+      );
+
+      return;
+    }
+
+    final result = await showDialog<_TireMountResult>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Reifensatz montieren?'),
-          content: Text(
-            'Soll „${tireSet.name}“ als aktuell montierter '
-            'Reifensatz festgelegt werden?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-              child: const Text('Als montiert setzen'),
-            ),
-          ],
+        return _TireMountDialog(
+          tireSet: tireSet,
+          currentMileage: vehicle!.mileage,
         );
       },
     );
 
-    if (shouldSetMounted == true) {
-      await ref
-          .read(tireProvider.notifier)
-          .setMountedTireSet(vehicleId: vehicleId, tireSetId: tireSet.id);
+    if (result == null) {
+      return;
     }
+
+    await ref
+        .read(tireProvider.notifier)
+        .setMountedTireSet(
+          vehicleId: vehicleId,
+          tireSetId: tireSet.id,
+          mileage: result.mileage,
+          mountedDate: result.date,
+        );
+
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${tireSet.name} wurde bei '
+          '${_formatMileage(result.mileage)} km als montiert gespeichert.',
+        ),
+      ),
+    );
   }
 
   List<TireSet> _sortTireSets(List<TireSet> tireSets) {
@@ -124,9 +158,26 @@ class TiresPage extends ConsumerWidget {
     return sorted;
   }
 
+  static String _formatMileage(int mileage) {
+    final value = mileage.toString();
+    final buffer = StringBuffer();
+
+    for (var i = 0; i < value.length; i++) {
+      if (i > 0 && (value.length - i) % 3 == 0) {
+        buffer.write('.');
+      }
+
+      buffer.write(value[i]);
+    }
+
+    return buffer.toString();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tireSetsAsync = ref.watch(tireProvider);
+
+    ref.watch(vehicleProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -203,6 +254,9 @@ class TiresPage extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _TireSetCard(
                       tireSet: tireSet,
+                      totalDistanceFuture: ref
+                          .read(tireProvider.notifier)
+                          .getTotalTireDistance(tireSet: tireSet),
                       onEdit: () {
                         _openEditDialog(context, tireSet);
                       },
@@ -227,6 +281,170 @@ class TiresPage extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Reifensatz'),
       ),
+    );
+  }
+}
+
+class _TireMountResult {
+  const _TireMountResult({required this.mileage, required this.date});
+
+  final int mileage;
+  final DateTime date;
+}
+
+class _TireMountDialog extends StatefulWidget {
+  const _TireMountDialog({required this.tireSet, required this.currentMileage});
+
+  final TireSet tireSet;
+  final int currentMileage;
+
+  @override
+  State<_TireMountDialog> createState() {
+    return _TireMountDialogState();
+  }
+}
+
+class _TireMountDialogState extends State<_TireMountDialog> {
+  late final TextEditingController _mileageController;
+
+  late DateTime _selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _mileageController = TextEditingController(
+      text: widget.currentMileage.toString(),
+    );
+
+    _selectedDate = DateUtils.dateOnly(DateTime.now());
+  }
+
+  @override
+  void dispose() {
+    _mileageController.dispose();
+
+    super.dispose();
+  }
+
+  Future<void> _selectDate() async {
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(1980),
+      lastDate: DateTime.now(),
+    );
+
+    if (selectedDate == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedDate = selectedDate;
+    });
+  }
+
+  void _confirm() {
+    final mileage = int.tryParse(
+      _mileageController.text.trim().replaceAll('.', '').replaceAll(',', ''),
+    );
+
+    if (mileage == null || mileage < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bitte einen gültigen Kilometerstand eingeben.'),
+        ),
+      );
+
+      return;
+    }
+
+    if (mileage < widget.currentMileage) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Der Kilometerstand darf nicht unter '
+            '${widget.currentMileage} km liegen.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    Navigator.of(
+      context,
+    ).pop(_TireMountResult(mileage: mileage, date: _selectedDate));
+  }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day.$month.${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reifensatz montieren'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Du möchtest „${widget.tireSet.name}“ '
+              'als aktuell montierten Reifensatz '
+              'festlegen.',
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _mileageController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Kilometerstand',
+                suffixText: 'km',
+                prefixIcon: Icon(Icons.speed),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            InkWell(
+              onTap: _selectDate,
+              borderRadius: BorderRadius.circular(12),
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Montagedatum',
+                  prefixIcon: Icon(Icons.calendar_today_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(_formatDate(_selectedDate)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Aktueller Fahrzeugstand: '
+              '${TiresPage._formatMileage(widget.currentMileage)} km',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton.icon(
+          onPressed: _confirm,
+          icon: const Icon(Icons.check_circle_outline),
+          label: const Text('Montieren'),
+        ),
+      ],
     );
   }
 }
@@ -286,7 +504,8 @@ class _TireOverviewCard extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         '${tireSets.length} '
-                        '${tireSets.length == 1 ? 'Reifensatz' : 'Reifensätze'} gespeichert',
+                        '${tireSets.length == 1 ? 'Reifensatz' : 'Reifensätze'} '
+                        'gespeichert',
                       ),
                     ],
                   ),
@@ -312,25 +531,52 @@ class _TireOverviewCard extends StatelessWidget {
                 '${mountedTireSet.tireType} · '
                 '${mountedTireSet.tireSize}',
               ),
+              if (mountedTireSet.mountedMileage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Montiert bei '
+                  '${TiresPage._formatMileage(mountedTireSet.mountedMileage!)} km',
+                ),
+              ],
+              if (mountedTireSet.mountedDate != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Montiert am '
+                  '${_formatDate(mountedTireSet.mountedDate!)}',
+                ),
+              ],
             ] else ...[
-              const Text('Aktuell ist kein Reifensatz als montiert markiert.'),
+              const Text(
+                'Aktuell ist kein Reifensatz '
+                'als montiert markiert.',
+              ),
             ],
           ],
         ),
       ),
     );
   }
+
+  static String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day.$month.${date.year}';
+  }
 }
 
 class _TireSetCard extends StatelessWidget {
   const _TireSetCard({
     required this.tireSet,
+    required this.totalDistanceFuture,
     required this.onEdit,
     required this.onDelete,
     required this.onSetMounted,
   });
 
   final TireSet tireSet;
+  final Future<int> totalDistanceFuture;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onSetMounted;
@@ -352,8 +598,6 @@ class _TireSetCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    // Nullable Werte einmal lokal speichern.
-    // Dadurch kann Dart die Null-Sicherheit korrekt erkennen.
     final treadDepth = tireSet.treadDepth;
     final productionYear = tireSet.productionYear;
     final manufacturer = tireSet.manufacturer;
@@ -483,8 +727,76 @@ class _TireSetCard extends StatelessWidget {
                         icon: Icons.calendar_month_outlined,
                         label: 'Bj. $productionYear',
                       ),
+                    if (tireSet.isMounted && tireSet.mountedMileage != null)
+                      _TireInfoChip(
+                        icon: Icons.speed,
+                        label:
+                            'seit ${TiresPage._formatMileage(tireSet.mountedMileage!)} km',
+                      ),
                   ],
                 ),
+                const SizedBox(height: 14),
+
+                // Gesamtlaufleistung dieses Reifensatzes
+                FutureBuilder<int>(
+                  future: totalDistanceFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Row(
+                        children: [
+                          Icon(
+                            Icons.route_outlined,
+                            size: 19,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Laufleistung wird berechnet …',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      );
+                    }
+
+                    if (snapshot.hasError) {
+                      return Row(
+                        children: [
+                          Icon(
+                            Icons.route_outlined,
+                            size: 19,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Laufleistung nicht verfügbar',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      );
+                    }
+
+                    final totalDistance = snapshot.data ?? 0;
+
+                    return Row(
+                      children: [
+                        Icon(
+                          Icons.route_outlined,
+                          size: 19,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Gesamtlaufleistung: '
+                          '${TiresPage._formatMileage(totalDistance)} km',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+
                 if (manufacturerAndModel.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   Row(
