@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../models/vehicle.dart';
+import '../../services/premium_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
 import 'add_vehicle_dialog.dart';
@@ -16,6 +18,124 @@ class VehiclesPage extends ConsumerWidget {
         return const AddVehicleDialog();
       },
     );
+  }
+
+  Future<void> _showPremiumDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+
+        return AlertDialog(
+          icon: CircleAvatar(
+            radius: 28,
+            backgroundColor: colors.primaryContainer,
+            child: Icon(
+              Icons.workspace_premium_outlined,
+              size: 30,
+              color: colors.primary,
+            ),
+          ),
+          title: const Text('MotorLog Premium', textAlign: TextAlign.center),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'In der kostenlosen Version von MotorLog kannst du '
+                'ein Fahrzeug verwalten.',
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 18),
+              _PremiumDialogFeature(
+                icon: Icons.directions_car_outlined,
+                text: 'Mehrere Fahrzeuge verwalten',
+              ),
+              SizedBox(height: 10),
+              _PremiumDialogFeature(
+                icon: Icons.cloud_done_outlined,
+                text: 'Cloud-Backup',
+              ),
+              SizedBox(height: 10),
+              _PremiumDialogFeature(
+                icon: Icons.sync,
+                text: 'Geräteübergreifende Synchronisierung',
+              ),
+              SizedBox(height: 10),
+              _PremiumDialogFeature(
+                icon: Icons.bar_chart_outlined,
+                text: 'Erweiterte Statistiken',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Später'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Den Premium-Kauf bauen wir als Nächstes ein.',
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.workspace_premium_outlined),
+              label: const Text('Premium entdecken'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _tryAddVehicle(
+    BuildContext context,
+    WidgetRef ref,
+    List<Vehicle> vehicles,
+  ) async {
+    final premiumState = ref.read(premiumProvider);
+
+    if (premiumState.isLoading) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Premium-Status wird noch geladen.')),
+      );
+
+      return;
+    }
+
+    if (premiumState.hasError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Premium-Status konnte nicht geprüft werden. Bitte erneut versuchen.',
+          ),
+        ),
+      );
+
+      await ref.read(premiumProvider.notifier).reload();
+
+      return;
+    }
+
+    final isPremium = premiumState.value ?? false;
+
+    if (!isPremium && vehicles.isNotEmpty) {
+      await _showPremiumDialog(context);
+      return;
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+
+    await _openAddVehicleDialog(context);
   }
 
   Future<void> _confirmDelete(
@@ -110,6 +230,7 @@ class VehiclesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vehiclesAsync = ref.watch(vehicleProvider);
+    final premiumAsync = ref.watch(premiumProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -119,7 +240,9 @@ class VehiclesPage extends ConsumerWidget {
         ),
       ),
       body: vehiclesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () {
+          return const Center(child: CircularProgressIndicator());
+        },
         error: (error, stackTrace) {
           return Center(
             child: Padding(
@@ -155,7 +278,7 @@ class VehiclesPage extends ConsumerWidget {
           if (vehicles.isEmpty) {
             return _EmptyVehiclesView(
               onAddVehicle: () {
-                _openAddVehicleDialog(context);
+                _tryAddVehicle(context, ref, vehicles);
               },
             );
           }
@@ -163,8 +286,11 @@ class VehiclesPage extends ConsumerWidget {
           final sortedVehicles = _sortVehicles(vehicles);
 
           return RefreshIndicator(
-            onRefresh: () {
-              return ref.read(vehicleProvider.notifier).reload();
+            onRefresh: () async {
+              await Future.wait([
+                ref.read(vehicleProvider.notifier).reload(),
+                ref.read(premiumProvider.notifier).reload(),
+              ]);
             },
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
@@ -181,8 +307,6 @@ class VehiclesPage extends ConsumerWidget {
                   confirmDismiss: (direction) async {
                     await _confirmDelete(context, ref, vehicle);
 
-                    // Die Karte wird vom Provider entfernt.
-                    // Dismissible selbst soll sie nicht zusätzlich entfernen.
                     return false;
                   },
                   background: Container(
@@ -226,13 +350,53 @@ class VehiclesPage extends ConsumerWidget {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          _openAddVehicleDialog(context);
+      floatingActionButton: vehiclesAsync.maybeWhen(
+        data: (vehicles) {
+          final isPremium = premiumAsync.asData?.value ?? false;
+
+          final freeLimitReached = !isPremium && vehicles.isNotEmpty;
+
+          return FloatingActionButton.extended(
+            onPressed: () {
+              _tryAddVehicle(context, ref, vehicles);
+            },
+            icon: Icon(freeLimitReached ? Icons.lock_outline : Icons.add),
+            label: Text(freeLimitReached ? 'Premium' : 'Fahrzeug'),
+          );
         },
-        icon: const Icon(Icons.add),
-        label: const Text('Fahrzeug'),
+        orElse: () {
+          return null;
+        },
       ),
+    );
+  }
+}
+
+class _PremiumDialogFeature extends StatelessWidget {
+  const _PremiumDialogFeature({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: colors.primaryContainer,
+          child: Icon(icon, size: 19, color: colors.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
     );
   }
 }

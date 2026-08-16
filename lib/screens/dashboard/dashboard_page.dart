@@ -9,7 +9,6 @@ import '../../models/vehicle.dart';
 import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
 import '../../services/maintenance_provider.dart';
-import '../../services/notification_service.dart';
 import '../../services/vehicle_provider.dart';
 import '../../utils/maintenance_status_calculator.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
@@ -124,8 +123,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     context.go('/documents/${vehicle.id}');
   }
 
-  Future<void> _showTestNotification() async {
-    await NotificationService.instance.showTestNotification();
+  void _openSettings() {
+    context.go('/settings');
   }
 
   @override
@@ -143,9 +142,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ),
         actions: [
           IconButton(
-            tooltip: 'Test-Benachrichtigung',
-            onPressed: _showTestNotification,
-            icon: const Icon(Icons.notifications_outlined),
+            tooltip: 'Profil und Einstellungen',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.account_circle_outlined),
           ),
         ],
       ),
@@ -259,10 +258,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             return firstMileage.compareTo(secondMileage);
           });
 
-          // Neue zentrale Statistikberechnung.
-          //
-          // Tankvorgänge, normale Ausgaben und Wartungen
-          // werden gemeinsam ausgewertet.
           final statistics = calculateVehicleStatistics(
             fuelEntries: fuelEntries,
             expenses: expenses,
