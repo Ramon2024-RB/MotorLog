@@ -9,6 +9,7 @@ import '../../models/vehicle.dart';
 import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
 import '../../services/maintenance_provider.dart';
+import '../../services/premium_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
@@ -88,12 +89,48 @@ class VehicleDetailPage extends ConsumerWidget {
     context.go('/statistics/${vehicle.id}');
   }
 
+  void _showPremiumDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(Icons.workspace_premium_outlined),
+          title: const Text('Premium-Funktion'),
+          content: const Text(
+            'Dokumente und Fahrzeugunterlagen sind mit '
+            'MotorLog Premium verfügbar.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Später'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                context.push('/premium');
+              },
+              icon: const Icon(Icons.workspace_premium_outlined),
+              label: const Text('Premium entdecken'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vehiclesAsync = ref.watch(vehicleProvider);
     final fuelEntriesAsync = ref.watch(fuelEntryProvider);
     final expensesAsync = ref.watch(expenseProvider);
     final maintenanceAsync = ref.watch(maintenanceProvider);
+    final premiumAsync = ref.watch(premiumProvider);
+
+    final isPremium = premiumAsync.value ?? false;
 
     final loadedVehicles = vehiclesAsync.asData?.value ?? <Vehicle>[];
     final selectedVehicle = _findVehicle(loadedVehicles);
@@ -200,6 +237,7 @@ class VehicleDetailPage extends ConsumerWidget {
                 ref.read(fuelEntryProvider.notifier).reload(),
                 ref.read(expenseProvider.notifier).reload(),
                 ref.read(maintenanceProvider.notifier).reload(),
+                ref.read(premiumProvider.notifier).reload(),
               ]);
             },
             child: ListView(
@@ -337,9 +375,17 @@ class VehicleDetailPage extends ConsumerWidget {
                 _MenuCard(
                   icon: Icons.description_outlined,
                   title: 'Dokumente',
-                  subtitle: 'Rechnungen und Fahrzeugunterlagen',
+                  subtitle: isPremium
+                      ? 'Rechnungen und Fahrzeugunterlagen'
+                      : 'Premium-Funktion',
+                  isPremiumLocked: !isPremium,
                   onTap: () {
-                    _openDocuments(context, vehicle);
+                    if (isPremium) {
+                      _openDocuments(context, vehicle);
+                      return;
+                    }
+
+                    _showPremiumDialog(context);
                   },
                 ),
 
@@ -703,12 +749,14 @@ class _MenuCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.isPremiumLocked = false,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool isPremiumLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -736,16 +784,57 @@ class _MenuCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+
+                        if (isPremiumLocked) ...[
+                          const SizedBox(width: 7),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.lock_outline,
+                                  size: 12,
+                                  color: colorScheme.primary,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Premium',
+                                  style: TextStyle(
+                                    color: colorScheme.primary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
+
                     const SizedBox(height: 2),
+
                     Text(
                       subtitle,
                       maxLines: 1,
@@ -758,7 +847,11 @@ class _MenuCard extends StatelessWidget {
 
               const SizedBox(width: 6),
 
-              const Icon(Icons.chevron_right, size: 21),
+              Icon(
+                isPremiumLocked ? Icons.lock_outline : Icons.chevron_right,
+                size: 21,
+                color: isPremiumLocked ? colorScheme.primary : null,
+              ),
             ],
           ),
         ),
