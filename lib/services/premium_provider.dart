@@ -33,6 +33,21 @@ class PremiumNotifier extends AsyncNotifier<bool> {
     return profile['is_premium'] == true;
   }
 
+  Future<void> activatePremiumForTesting() async {
+    final user = _supabase.auth.currentUser;
+
+    if (user == null) {
+      throw const AuthException('Kein Benutzer angemeldet.');
+    }
+
+    await _supabase
+        .from('profiles')
+        .update({'is_premium': true})
+        .eq('id', user.id);
+
+    state = const AsyncData(true);
+  }
+
   Future<void> reload() async {
     state = const AsyncLoading();
 

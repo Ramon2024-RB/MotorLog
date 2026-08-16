@@ -13,6 +13,7 @@ import '../../screens/documents/documents_page.dart';
 import '../../screens/expenses/expenses_page.dart';
 import '../../screens/fuel/fuel_page.dart';
 import '../../screens/maintenance/maintenance_page.dart';
+import '../../screens/premium/premium_page.dart';
 import '../../screens/settings/settings_page.dart';
 import '../../screens/statistics/vehicle_statistics_page.dart';
 import '../../screens/tires/tires_page.dart';
@@ -83,6 +84,13 @@ final GoRouter appRouter = GoRouter(
       path: '/settings',
       builder: (context, state) {
         return const SettingsPage();
+      },
+    ),
+
+    GoRoute(
+      path: '/premium',
+      builder: (context, state) {
+        return const PremiumPage();
       },
     ),
 

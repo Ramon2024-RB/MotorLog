@@ -132,187 +132,191 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: colors.primaryContainer,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 32,
-                  backgroundColor: colors.primary,
-                  child: Text(
-                    _initial,
-                    style: TextStyle(
-                      color: colors.onPrimary,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
+      body: RefreshIndicator(
+        onRefresh: () {
+          return ref.read(premiumProvider.notifier).reload();
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 32,
+                    backgroundColor: colors.primary,
+                    child: Text(
+                      _initial,
+                      style: TextStyle(
+                        color: colors.onPrimary,
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'MotorLog Konto',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'MotorLog Konto',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        _email,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: colors.onSurfaceVariant,
+                        const SizedBox(height: 5),
+                        Text(
+                          _email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: colors.onSurfaceVariant),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 28),
+
+            const _SectionTitle(title: 'Dein Tarif'),
+
+            const SizedBox(height: 12),
+
+            premiumAsync.when(
+              loading: () => const _PremiumLoadingCard(),
+              error: (error, stackTrace) {
+                return _PremiumErrorCard(
+                  onRetry: () {
+                    ref.read(premiumProvider.notifier).reload();
+                  },
+                );
+              },
+              data: (isPremium) {
+                return _PremiumCard(
+                  isPremium: isPremium,
+                  onTap: () {
+                    context.push('/premium');
+                  },
+                );
+              },
+            ),
+
+            const SizedBox(height: 28),
+
+            const _SectionTitle(title: 'Konto'),
+
+            const SizedBox(height: 12),
+
+            _SettingsCard(
+              children: [
+                _SettingsTile(
+                  icon: Icons.person_outline,
+                  title: 'Kontodaten',
+                  subtitle: _email,
+                  onTap: () {
+                    _showComingSoon('Kontodaten');
+                  },
+                ),
+                const Divider(height: 1),
+                _SettingsTile(
+                  icon: Icons.cloud_outlined,
+                  title: 'Cloud & Synchronisierung',
+                  subtitle: 'Backup und Synchronisierung verwalten',
+                  onTap: () {
+                    _showComingSoon('Cloud & Synchronisierung');
+                  },
                 ),
               ],
             ),
-          ),
 
-          const SizedBox(height: 28),
+            const SizedBox(height: 28),
 
-          const _SectionTitle(title: 'Dein Tarif'),
+            const _SectionTitle(title: 'App'),
 
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-          premiumAsync.when(
-            loading: () => const _PremiumLoadingCard(),
-            error: (error, stackTrace) => _PremiumErrorCard(
-              onRetry: () {
-                ref.read(premiumProvider.notifier).reload();
-              },
-            ),
-            data: (isPremium) => _PremiumCard(
-              isPremium: isPremium,
-              onTap: () {
-                if (isPremium) {
-                  _showComingSoon('Premium-Verwaltung');
-                } else {
-                  _showComingSoon('MotorLog Premium');
-                }
-              },
-            ),
-          ),
-
-          const SizedBox(height: 28),
-
-          const _SectionTitle(title: 'Konto'),
-
-          const SizedBox(height: 12),
-
-          _SettingsCard(
-            children: [
-              _SettingsTile(
-                icon: Icons.person_outline,
-                title: 'Kontodaten',
-                subtitle: _email,
-                onTap: () {
-                  _showComingSoon('Kontodaten');
-                },
-              ),
-              const Divider(height: 1),
-              _SettingsTile(
-                icon: Icons.cloud_outlined,
-                title: 'Cloud & Synchronisierung',
-                subtitle: 'Backup und Synchronisierung verwalten',
-                onTap: () {
-                  _showComingSoon('Cloud & Synchronisierung');
-                },
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 28),
-
-          const _SectionTitle(title: 'App'),
-
-          const SizedBox(height: 12),
-
-          _SettingsCard(
-            children: [
-              _SettingsTile(
-                icon: Icons.notifications_outlined,
-                title: 'Benachrichtigungen',
-                subtitle: 'Erinnerungen und Hinweise verwalten',
-                onTap: () {
-                  _showComingSoon('Benachrichtigungseinstellungen');
-                },
-              ),
-              const Divider(height: 1),
-              _SettingsTile(
-                icon: Icons.palette_outlined,
-                title: 'Darstellung',
-                subtitle: 'Design und Erscheinungsbild',
-                onTap: () {
-                  _showComingSoon('Darstellungseinstellungen');
-                },
-              ),
-              const Divider(height: 1),
-              _SettingsTile(
-                icon: Icons.info_outline,
-                title: 'Über MotorLog',
-                subtitle: 'Version, Datenschutz und Informationen',
-                onTap: () {
-                  _showComingSoon('Über MotorLog');
-                },
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 28),
-
-          const _SectionTitle(title: 'Konto'),
-
-          const SizedBox(height: 12),
-
-          Card(
-            elevation: 0,
-            margin: EdgeInsets.zero,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 8,
-              ),
-              leading: CircleAvatar(
-                backgroundColor: colors.errorContainer,
-                child: Icon(Icons.logout, color: colors.onErrorContainer),
-              ),
-              title: Text(
-                'Abmelden',
-                style: TextStyle(
-                  color: colors.error,
-                  fontWeight: FontWeight.bold,
+            _SettingsCard(
+              children: [
+                _SettingsTile(
+                  icon: Icons.notifications_outlined,
+                  title: 'Benachrichtigungen',
+                  subtitle: 'Erinnerungen und Hinweise verwalten',
+                  onTap: () {
+                    _showComingSoon('Benachrichtigungseinstellungen');
+                  },
                 ),
-              ),
-              subtitle: const Text('Von deinem MotorLog-Konto abmelden'),
-              trailing: _isSigningOut
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.chevron_right),
-              onTap: _isSigningOut ? null : _signOut,
+                const Divider(height: 1),
+                _SettingsTile(
+                  icon: Icons.palette_outlined,
+                  title: 'Darstellung',
+                  subtitle: 'Design und Erscheinungsbild',
+                  onTap: () {
+                    _showComingSoon('Darstellungseinstellungen');
+                  },
+                ),
+                const Divider(height: 1),
+                _SettingsTile(
+                  icon: Icons.info_outline,
+                  title: 'Über MotorLog',
+                  subtitle: 'Version, Datenschutz und Informationen',
+                  onTap: () {
+                    _showComingSoon('Über MotorLog');
+                  },
+                ),
+              ],
             ),
-          ),
-        ],
+
+            const SizedBox(height: 28),
+
+            const _SectionTitle(title: 'Konto'),
+
+            const SizedBox(height: 12),
+
+            Card(
+              elevation: 0,
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 8,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: colors.errorContainer,
+                  child: Icon(Icons.logout, color: colors.onErrorContainer),
+                ),
+                title: Text(
+                  'Abmelden',
+                  style: TextStyle(
+                    color: colors.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text('Von deinem MotorLog-Konto abmelden'),
+                trailing: _isSigningOut
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.chevron_right),
+                onTap: _isSigningOut ? null : _signOut,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -379,7 +383,7 @@ class _PremiumCard extends StatelessWidget {
 
               const SizedBox(height: 18),
 
-              if (isPremium)
+              if (isPremium) ...[
                 const Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -397,8 +401,8 @@ class _PremiumCard extends StatelessWidget {
                       label: 'Synchronisierung',
                     ),
                   ],
-                )
-              else
+                ),
+              ] else ...[
                 const Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -417,6 +421,27 @@ class _PremiumCard extends StatelessWidget {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Icon(
+                      Icons.lock_open_outlined,
+                      size: 18,
+                      color: colors.primary,
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      'Premium entdecken',
+                      style: TextStyle(
+                        color: colors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -430,10 +455,11 @@ class _PremiumLoadingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
+    return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
-      child: Padding(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: const Padding(
         padding: EdgeInsets.all(24),
         child: Row(
           children: [
@@ -461,6 +487,7 @@ class _PremiumErrorCard extends StatelessWidget {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(

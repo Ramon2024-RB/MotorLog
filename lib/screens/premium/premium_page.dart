@@ -1,21 +1,100 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class PremiumPage extends StatefulWidget {
+import '../../services/premium_provider.dart';
+
+class PremiumPage extends ConsumerStatefulWidget {
   const PremiumPage({super.key});
 
   @override
-  State<PremiumPage> createState() => _PremiumPageState();
+  ConsumerState<PremiumPage> createState() => _PremiumPageState();
 }
 
-class _PremiumPageState extends State<PremiumPage> {
+class _PremiumPageState extends ConsumerState<PremiumPage> {
   bool _yearlySelected = true;
+  bool _isActivatingPremium = false;
 
-  void _showPurchaseComingSoon() {
+  Future<void> _activatePremiumForTesting() async {
+    if (_isActivatingPremium) {
+      return;
+    }
+
+    final shouldActivate = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(Icons.science_outlined),
+          title: const Text('Premium testen?'),
+          content: const Text(
+            'Damit wird MotorLog Premium für dieses Testkonto '
+            'freigeschaltet.\n\n'
+            'Es findet kein echter Kauf und keine Zahlung statt.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Premium testen'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldActivate != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isActivatingPremium = true;
+    });
+
+    try {
+      await ref.read(premiumProvider.notifier).activatePremiumForTesting();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('MotorLog Premium wurde für dein Testkonto aktiviert.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Premium konnte nicht aktiviert werden: $error'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isActivatingPremium = false;
+        });
+      }
+    }
+  }
+
+  void _showRestoreComingSoon() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Den Premium-Kauf verbinden wir im nächsten Schritt mit dem App Store und Google Play.',
+          'Die Wiederherstellung echter Käufe verbinden wir später '
+          'mit dem App Store und Google Play.',
         ),
       ),
     );
@@ -24,6 +103,9 @@ class _PremiumPageState extends State<PremiumPage> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final premiumAsync = ref.watch(premiumProvider);
+
+    final isPremium = premiumAsync.value ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -66,7 +148,9 @@ class _PremiumPageState extends State<PremiumPage> {
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    'Mehr aus MotorLog herausholen',
+                    isPremium
+                        ? 'Du hast MotorLog Premium'
+                        : 'Mehr aus MotorLog herausholen',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -74,9 +158,11 @@ class _PremiumPageState extends State<PremiumPage> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Verwalte mehrere Fahrzeuge, sichere deine Daten '
-                    'in der Cloud und erhalte noch mehr Einblicke in '
-                    'deine Fahrzeugkosten.',
+                    isPremium
+                        ? 'Premium ist für dein MotorLog-Konto aktiviert.'
+                        : 'Verwalte mehrere Fahrzeuge, sichere deine Daten '
+                              'in der Cloud und erhalte noch mehr Einblicke in '
+                              'deine Fahrzeugkosten.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: colors.onSurfaceVariant,
@@ -170,86 +256,140 @@ class _PremiumPageState extends State<PremiumPage> {
 
             const SizedBox(height: 32),
 
-            Text(
-              'Premium wählen',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-
-            const SizedBox(height: 6),
-
-            Text(
-              'Die endgültigen Preise werden später direkt aus dem '
-              'App Store bzw. Google Play geladen.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-            ),
-
-            const SizedBox(height: 14),
-
-            _PlanCard(
-              title: 'Jährlich',
-              subtitle: '12 Monate MotorLog Premium',
-              badge: 'Beste Wahl',
-              selected: _yearlySelected,
-              onTap: () {
-                setState(() {
-                  _yearlySelected = true;
-                });
-              },
-            ),
-
-            const SizedBox(height: 12),
-
-            _PlanCard(
-              title: 'Monatlich',
-              subtitle: 'Flexibel monatlich',
-              selected: !_yearlySelected,
-              onTap: () {
-                setState(() {
-                  _yearlySelected = false;
-                });
-              },
-            ),
-
-            const SizedBox(height: 22),
-
-            FilledButton.icon(
-              onPressed: _showPurchaseComingSoon,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(58),
+            if (isPremium) ...[
+              Card(
+                elevation: 0,
+                margin: EdgeInsets.zero,
+                color: colors.primaryContainer,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: colors.primary,
+                        child: Icon(Icons.check, color: colors.onPrimary),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Premium aktiv',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Alle Premium-Funktionen sind für '
+                              'dieses Konto freigeschaltet.',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              icon: const Icon(Icons.workspace_premium_outlined),
-              label: const Text(
-                'Premium freischalten',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ] else ...[
+              Text(
+                'Premium wählen',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
-            ),
 
-            const SizedBox(height: 14),
+              const SizedBox(height: 6),
 
-            TextButton(
-              onPressed: _showPurchaseComingSoon,
-              child: const Text('Käufe wiederherstellen'),
-            ),
+              Text(
+                'Die endgültigen Preise werden später direkt aus dem '
+                'App Store bzw. Google Play geladen.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
 
-            const SizedBox(height: 8),
+              const SizedBox(height: 14),
 
-            Text(
-              'Der Kauf ist aktuell noch nicht aktiviert. '
-              'Vor der Veröffentlichung werden Preis, Laufzeit, '
-              'Kündigung und weitere Pflichtinformationen hier '
-              'vollständig angezeigt.',
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-            ),
+              _PlanCard(
+                title: 'Jährlich',
+                subtitle: '12 Monate MotorLog Premium',
+                badge: 'Beste Wahl',
+                selected: _yearlySelected,
+                onTap: () {
+                  setState(() {
+                    _yearlySelected = true;
+                  });
+                },
+              ),
+
+              const SizedBox(height: 12),
+
+              _PlanCard(
+                title: 'Monatlich',
+                subtitle: 'Flexibel monatlich',
+                selected: !_yearlySelected,
+                onTap: () {
+                  setState(() {
+                    _yearlySelected = false;
+                  });
+                },
+              ),
+
+              const SizedBox(height: 22),
+
+              FilledButton.icon(
+                onPressed: _isActivatingPremium
+                    ? null
+                    : _activatePremiumForTesting,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(58),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                icon: _isActivatingPremium
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.science_outlined),
+                label: Text(
+                  _isActivatingPremium
+                      ? 'Premium wird aktiviert ...'
+                      : 'Premium testweise freischalten',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              TextButton(
+                onPressed: _showRestoreComingSoon,
+                child: const Text('Käufe wiederherstellen'),
+              ),
+
+              const SizedBox(height: 8),
+
+              Text(
+                'Testmodus: Es findet aktuell kein echter Kauf statt. '
+                'Vor der Veröffentlichung wird diese Funktion durch '
+                'die Abonnements des App Store und Google Play ersetzt.',
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ],
           ],
         ),
       ),

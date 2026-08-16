@@ -78,13 +78,7 @@ class VehiclesPage extends ConsumerWidget {
               onPressed: () {
                 Navigator.of(dialogContext).pop();
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Den Premium-Kauf bauen wir als Nächstes ein.',
-                    ),
-                  ),
-                );
+                context.push('/premium');
               },
               icon: const Icon(Icons.workspace_premium_outlined),
               label: const Text('Premium entdecken'),
