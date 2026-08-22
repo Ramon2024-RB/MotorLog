@@ -14,6 +14,7 @@ import '../../screens/expenses/expenses_page.dart';
 import '../../screens/fuel/fuel_page.dart';
 import '../../screens/maintenance/maintenance_page.dart';
 import '../../screens/premium/premium_page.dart';
+import '../../screens/settings/cloud_sync_page.dart';
 import '../../screens/settings/settings_page.dart';
 import '../../screens/statistics/vehicle_statistics_page.dart';
 import '../../screens/tires/tires_page.dart';
@@ -66,6 +67,10 @@ final GoRouter appRouter = GoRouter(
   },
 
   routes: [
+    // -------------------------------------------------------------------------
+    // LOGIN
+    // -------------------------------------------------------------------------
+
     GoRoute(
       path: '/login',
       builder: (context, state) {
@@ -73,6 +78,9 @@ final GoRouter appRouter = GoRouter(
       },
     ),
 
+    // -------------------------------------------------------------------------
+    // REGISTRIERUNG
+    // -------------------------------------------------------------------------
     GoRoute(
       path: '/register',
       builder: (context, state) {
@@ -80,13 +88,32 @@ final GoRouter appRouter = GoRouter(
       },
     ),
 
+    // -------------------------------------------------------------------------
+    // EINSTELLUNGEN
+    // -------------------------------------------------------------------------
     GoRoute(
       path: '/settings',
       builder: (context, state) {
         return const SettingsPage();
       },
+      routes: [
+        // ---------------------------------------------------------------------
+        // CLOUD & SYNCHRONISIERUNG
+        // /settings/cloud
+        // ---------------------------------------------------------------------
+
+        GoRoute(
+          path: 'cloud',
+          builder: (context, state) {
+            return const CloudSyncPage();
+          },
+        ),
+      ],
     ),
 
+    // -------------------------------------------------------------------------
+    // PREMIUM
+    // -------------------------------------------------------------------------
     GoRoute(
       path: '/premium',
       builder: (context, state) {
@@ -94,12 +121,18 @@ final GoRouter appRouter = GoRouter(
       },
     ),
 
+    // -------------------------------------------------------------------------
+    // HAUPTNAVIGATION
+    // -------------------------------------------------------------------------
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         return AppShell(navigationShell: navigationShell);
       },
       branches: [
-        // 0 – Übersicht
+        // ---------------------------------------------------------------------
+        // 0 – ÜBERSICHT
+        // ---------------------------------------------------------------------
+
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -108,6 +141,10 @@ final GoRouter appRouter = GoRouter(
                 return const DashboardPage();
               },
               routes: [
+                // -----------------------------------------------------------------
+                // WARTUNGEN
+                // -----------------------------------------------------------------
+
                 GoRoute(
                   path: 'maintenance/:vehicleId',
                   builder: (context, state) {
@@ -116,6 +153,10 @@ final GoRouter appRouter = GoRouter(
                     return MaintenancePage(vehicleId: vehicleId);
                   },
                 ),
+
+                // -----------------------------------------------------------------
+                // REIFEN
+                // -----------------------------------------------------------------
                 GoRoute(
                   path: 'tires/:vehicleId',
                   builder: (context, state) {
@@ -124,6 +165,10 @@ final GoRouter appRouter = GoRouter(
                     return TiresPage(vehicleId: vehicleId);
                   },
                 ),
+
+                // -----------------------------------------------------------------
+                // DOKUMENTE
+                // -----------------------------------------------------------------
                 GoRoute(
                   path: 'documents/:vehicleId',
                   builder: (context, state) {
@@ -142,6 +187,10 @@ final GoRouter appRouter = GoRouter(
                     ),
                   ],
                 ),
+
+                // -----------------------------------------------------------------
+                // STATISTIKEN
+                // -----------------------------------------------------------------
                 GoRoute(
                   path: 'statistics/:vehicleId',
                   builder: (context, state) {
@@ -155,7 +204,9 @@ final GoRouter appRouter = GoRouter(
           ],
         ),
 
-        // 1 – Tanken
+        // ---------------------------------------------------------------------
+        // 1 – TANKEN
+        // ---------------------------------------------------------------------
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -169,7 +220,9 @@ final GoRouter appRouter = GoRouter(
           ],
         ),
 
-        // 2 – Kosten
+        // ---------------------------------------------------------------------
+        // 2 – KOSTEN
+        // ---------------------------------------------------------------------
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -183,7 +236,9 @@ final GoRouter appRouter = GoRouter(
           ],
         ),
 
-        // 3 – Fahrzeuge
+        // ---------------------------------------------------------------------
+        // 3 – FAHRZEUGE
+        // ---------------------------------------------------------------------
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -192,6 +247,10 @@ final GoRouter appRouter = GoRouter(
                 return const VehiclesPage();
               },
               routes: [
+                // -------------------------------------------------------------
+                // FAHRZEUGDETAILS
+                // -------------------------------------------------------------
+
                 GoRoute(
                   path: ':vehicleId',
                   builder: (context, state) {

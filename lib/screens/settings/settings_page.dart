@@ -232,7 +232,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   title: 'Cloud & Synchronisierung',
                   subtitle: 'Backup und Synchronisierung verwalten',
                   onTap: () {
-                    _showComingSoon('Cloud & Synchronisierung');
+                    context.push('/settings/cloud');
                   },
                 ),
               ],

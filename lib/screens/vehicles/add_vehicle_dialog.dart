@@ -62,9 +62,7 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
     final vehicle = widget.vehicle;
 
     _nameController = TextEditingController(text: vehicle?.name ?? '');
-
     _brandController = TextEditingController(text: vehicle?.brand ?? '');
-
     _modelController = TextEditingController(text: vehicle?.model ?? '');
 
     _yearController = TextEditingController(
@@ -138,7 +136,6 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
     }
 
     final year = int.tryParse(_yearController.text.trim());
-
     final mileage = int.tryParse(_mileageController.text.trim());
 
     if (year == null || mileage == null) {
@@ -306,13 +303,7 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
                         items: _vehicleTypes.map((type) {
                           return DropdownMenuItem<String>(
                             value: type,
-                            child: Row(
-                              children: [
-                                Icon(_vehicleIcon(type), size: 20),
-                                const SizedBox(width: 10),
-                                Text(type),
-                              ],
-                            ),
+                            child: Text(type),
                           );
                         }).toList(),
                         onChanged: _isSaving
@@ -325,7 +316,9 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
                                 }
                               },
                       ),
+
                       const SizedBox(height: 16),
+
                       MotorLogDropdown<String>(
                         value: _fuelType,
                         label: 'Kraftstoff',
@@ -333,13 +326,7 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
                         items: _fuelTypes.map((fuelType) {
                           return DropdownMenuItem<String>(
                             value: fuelType,
-                            child: Row(
-                              children: [
-                                Icon(_fuelIcon(fuelType), size: 20),
-                                const SizedBox(width: 10),
-                                Text(fuelType),
-                              ],
-                            ),
+                            child: Text(fuelType),
                           );
                         }).toList(),
                         onChanged: _isSaving
@@ -352,7 +339,9 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
                                 }
                               },
                       ),
+
                       const SizedBox(height: 16),
+
                       MotorLogTextField(
                         controller: _yearController,
                         label: 'Baujahr',
@@ -362,7 +351,9 @@ class _AddVehicleDialogState extends ConsumerState<AddVehicleDialog> {
                         textInputAction: TextInputAction.next,
                         validator: _yearValidator,
                       ),
+
                       const SizedBox(height: 16),
+
                       MotorLogTextField(
                         controller: _mileageController,
                         label: 'Kilometerstand',
