@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/expense.dart';
 import '../../models/fuel_entry.dart';
@@ -11,6 +12,7 @@ import '../../models/vehicle.dart';
 import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
 import '../../services/maintenance_provider.dart';
+import '../../services/premium_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../utils/vehicle_statistics_calculator.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
@@ -90,8 +92,8 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
     return buffer.toString();
   }
 
-  DateTime? _periodStartDate() {
-    final months = _selectedPeriod.months;
+  DateTime? _periodStartDate(_StatisticsPeriod period) {
+    final months = period.months;
 
     if (months == null) {
       return null;
@@ -102,8 +104,11 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
     return DateTime(now.year, now.month - months + 1, 1);
   }
 
-  bool _isInsideSelectedPeriod(DateTime date) {
-    final startDate = _periodStartDate();
+  bool _isInsideSelectedPeriod(
+    DateTime date,
+    _StatisticsPeriod effectivePeriod,
+  ) {
+    final startDate = _periodStartDate(effectivePeriod);
 
     if (startDate == null) {
       return true;
@@ -112,23 +117,32 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
     return !date.isBefore(startDate);
   }
 
-  List<FuelEntry> _filterFuelEntries(List<FuelEntry> entries) {
+  List<FuelEntry> _filterFuelEntries(
+    List<FuelEntry> entries,
+    _StatisticsPeriod effectivePeriod,
+  ) {
     return entries
-        .where((entry) => _isInsideSelectedPeriod(entry.date))
+        .where((entry) => _isInsideSelectedPeriod(entry.date, effectivePeriod))
         .toList();
   }
 
-  List<Expense> _filterExpenses(List<Expense> expenses) {
+  List<Expense> _filterExpenses(
+    List<Expense> expenses,
+    _StatisticsPeriod effectivePeriod,
+  ) {
     return expenses
-        .where((expense) => _isInsideSelectedPeriod(expense.date))
+        .where(
+          (expense) => _isInsideSelectedPeriod(expense.date, effectivePeriod),
+        )
         .toList();
   }
 
   List<MaintenanceEntry> _filterMaintenanceEntries(
     List<MaintenanceEntry> entries,
+    _StatisticsPeriod effectivePeriod,
   ) {
     return entries
-        .where((entry) => _isInsideSelectedPeriod(entry.date))
+        .where((entry) => _isInsideSelectedPeriod(entry.date, effectivePeriod))
         .toList();
   }
 
@@ -138,6 +152,11 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
     final fuelAsync = ref.watch(fuelEntryProvider);
     final expensesAsync = ref.watch(expenseProvider);
     final maintenanceAsync = ref.watch(maintenanceProvider);
+    final premiumAsync = ref.watch(premiumProvider);
+
+    final isPremium = premiumAsync.asData?.value ?? false;
+
+    final effectivePeriod = isPremium ? _selectedPeriod : _StatisticsPeriod.all;
 
     return Scaffold(
       appBar: AppBar(
@@ -211,12 +230,21 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
 
           // -------------------------------------------------------------------
           // Zeitraum anwenden
+          //
+          // Free verwendet immer "Gesamt".
+          // Premium darf den Zeitraum selbst auswählen.
           // -------------------------------------------------------------------
 
-          final fuelEntries = _filterFuelEntries(vehicleFuelEntries);
-          final expenses = _filterExpenses(vehicleExpenses);
+          final fuelEntries = _filterFuelEntries(
+            vehicleFuelEntries,
+            effectivePeriod,
+          );
+
+          final expenses = _filterExpenses(vehicleExpenses, effectivePeriod);
+
           final maintenanceEntries = _filterMaintenanceEntries(
             vehicleMaintenanceEntries,
+            effectivePeriod,
           );
 
           // -------------------------------------------------------------------
@@ -229,13 +257,17 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
             maintenanceEntries: maintenanceEntries,
           );
 
-          final consumptionPoints = _calculateConsumptionPoints(fuelEntries);
+          final consumptionPoints = isPremium
+              ? _calculateConsumptionPoints(fuelEntries)
+              : <_ConsumptionPoint>[];
 
-          final monthlyCosts = _calculateMonthlyCosts(
-            fuelEntries: fuelEntries,
-            expenses: expenses,
-            maintenanceEntries: maintenanceEntries,
-          );
+          final monthlyCosts = isPremium
+              ? _calculateMonthlyCosts(
+                  fuelEntries: fuelEntries,
+                  expenses: expenses,
+                  maintenanceEntries: maintenanceEntries,
+                )
+              : <_MonthlyCost>[];
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -244,6 +276,7 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
                 ref.read(fuelEntryProvider.notifier).reload(),
                 ref.read(expenseProvider.notifier).reload(),
                 ref.read(maintenanceProvider.notifier).reload(),
+                ref.read(premiumProvider.notifier).reload(),
               ]);
             },
             child: ListView(
@@ -254,25 +287,27 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
                   vehicle: vehicle,
                   totalCost:
                       '${_formatDecimal(statistics.totalVehicleCost, 2)} €',
-                  periodLabel: _selectedPeriod.label,
+                  periodLabel: effectivePeriod.label,
                 ),
 
-                const SizedBox(height: 18),
+                if (isPremium) ...[
+                  const SizedBox(height: 18),
 
-                _PeriodSelector(
-                  selectedPeriod: _selectedPeriod,
-                  onChanged: (period) {
-                    setState(() {
-                      _selectedPeriod = period;
-                    });
-                  },
-                ),
+                  _PeriodSelector(
+                    selectedPeriod: _selectedPeriod,
+                    onChanged: (period) {
+                      setState(() {
+                        _selectedPeriod = period;
+                      });
+                    },
+                  ),
+                ],
 
                 const SizedBox(height: 26),
 
                 _SectionTitle(
                   title: 'Verbrauch',
-                  subtitle: _selectedPeriod.label,
+                  subtitle: effectivePeriod.label,
                 ),
 
                 const SizedBox(height: 12),
@@ -308,7 +343,7 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
 
                 const SizedBox(height: 28),
 
-                _SectionTitle(title: 'Kosten', subtitle: _selectedPeriod.label),
+                _SectionTitle(title: 'Kosten', subtitle: effectivePeriod.label),
 
                 const SizedBox(height: 12),
 
@@ -322,32 +357,34 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
                       '${_formatDecimal(statistics.totalVehicleCost, 2)} €',
                 ),
 
-                const SizedBox(height: 12),
+                if (isPremium) ...[
+                  const SizedBox(height: 12),
 
-                _StatisticsGrid(
-                  children: [
-                    _StatisticCard(
-                      icon: Icons.euro_outlined,
-                      title: 'Kosten / km',
-                      value: statistics.costPerKm <= 0
-                          ? '–'
-                          : '${_formatDecimal(statistics.costPerKm, 2)} €',
-                    ),
-                    _StatisticCard(
-                      icon: Icons.route,
-                      title: 'Kosten / 100 km',
-                      value: statistics.costPer100Km <= 0
-                          ? '–'
-                          : '${_formatDecimal(statistics.costPer100Km, 2)} €',
-                    ),
-                  ],
-                ),
+                  _StatisticsGrid(
+                    children: [
+                      _StatisticCard(
+                        icon: Icons.euro_outlined,
+                        title: 'Kosten / km',
+                        value: statistics.costPerKm <= 0
+                            ? '–'
+                            : '${_formatDecimal(statistics.costPerKm, 2)} €',
+                      ),
+                      _StatisticCard(
+                        icon: Icons.route,
+                        title: 'Kosten / 100 km',
+                        value: statistics.costPer100Km <= 0
+                            ? '–'
+                            : '${_formatDecimal(statistics.costPer100Km, 2)} €',
+                      ),
+                    ],
+                  ),
+                ],
 
                 const SizedBox(height: 28),
 
                 _SectionTitle(
                   title: 'Einträge',
-                  subtitle: _selectedPeriod.label,
+                  subtitle: effectivePeriod.label,
                 ),
 
                 const SizedBox(height: 12),
@@ -360,26 +397,37 @@ class _VehicleStatisticsPageState extends ConsumerState<VehicleStatisticsPage> {
 
                 const SizedBox(height: 28),
 
-                _SectionTitle(
-                  title: 'Diagramme',
-                  subtitle: _selectedPeriod.label,
-                ),
+                if (isPremium) ...[
+                  _SectionTitle(
+                    title: 'Diagramme',
+                    subtitle: effectivePeriod.label,
+                  ),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                _ConsumptionChartCard(
-                  points: consumptionPoints,
-                  averageConsumption: statistics.averageConsumption,
-                  formatDecimal: _formatDecimal,
-                  formatMileage: _formatMileage,
-                ),
+                  _ConsumptionChartCard(
+                    points: consumptionPoints,
+                    averageConsumption: statistics.averageConsumption,
+                    formatDecimal: _formatDecimal,
+                    formatMileage: _formatMileage,
+                  ),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                _CostDevelopmentChartCard(
-                  months: monthlyCosts,
-                  formatDecimal: _formatDecimal,
-                ),
+                  _CostDevelopmentChartCard(
+                    months: monthlyCosts,
+                    formatDecimal: _formatDecimal,
+                  ),
+                ] else ...[
+                  const _SectionTitle(
+                    title: 'Erweiterte Statistiken',
+                    subtitle: 'MotorLog Premium',
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  _PremiumStatisticsCard(onPremiumTap: null),
+                ],
               ],
             ),
           );
@@ -1172,6 +1220,141 @@ class _CostLegendRow extends StatelessWidget {
 }
 
 // ============================================================================
+// PREMIUM
+// ============================================================================
+
+class _PremiumStatisticsCard extends StatelessWidget {
+  const _PremiumStatisticsCard({this.onPremiumTap});
+
+  final VoidCallback? onPremiumTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return MotorLogCard(
+      margin: EdgeInsets.zero,
+      padding: EdgeInsets.zero,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: colors.primaryContainer,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: colors.primary,
+              child: Icon(
+                Icons.lock_outline,
+                size: 29,
+                color: colors.onPrimary,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Text(
+              'Noch mehr aus deinen Daten herausholen',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Mit MotorLog Premium erhältst du detaillierte '
+              'Fahrzeugstatistiken und kannst deine Entwicklung '
+              'über verschiedene Zeiträume analysieren.',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+            ),
+
+            const SizedBox(height: 20),
+
+            const _PremiumStatisticFeature(
+              icon: Icons.date_range_outlined,
+              text: 'Statistiken nach Zeitraum filtern',
+            ),
+
+            const SizedBox(height: 10),
+
+            const _PremiumStatisticFeature(
+              icon: Icons.euro_outlined,
+              text: 'Kosten pro Kilometer auswerten',
+            ),
+
+            const SizedBox(height: 10),
+
+            const _PremiumStatisticFeature(
+              icon: Icons.show_chart,
+              text: 'Verbrauchsentwicklung als Diagramm',
+            ),
+
+            const SizedBox(height: 10),
+
+            const _PremiumStatisticFeature(
+              icon: Icons.bar_chart_outlined,
+              text: 'Monatliche Kostenentwicklung',
+            ),
+
+            const SizedBox(height: 22),
+
+            FilledButton.icon(
+              onPressed:
+                  onPremiumTap ??
+                  () {
+                    context.push('/premium');
+                  },
+              icon: const Icon(Icons.workspace_premium_outlined),
+              label: const Text(
+                'Premium entdecken',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PremiumStatisticFeature extends StatelessWidget {
+  const _PremiumStatisticFeature({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: colors.surface.withValues(alpha: 0.75),
+          child: Icon(icon, size: 18, color: colors.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
 // ALLGEMEINE UI
 // ============================================================================
 
@@ -1251,7 +1434,9 @@ class _StatisticsHeader extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 22),
+
             Row(
               children: [
                 Expanded(
@@ -1279,7 +1464,9 @@ class _StatisticsHeader extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 4),
+
             Text(
               totalCost,
               style: Theme.of(
