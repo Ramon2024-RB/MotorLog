@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/fuel_entry.dart';
 import '../models/vehicle.dart';
 
 class CloudSyncService {
@@ -143,6 +144,101 @@ class CloudSyncService {
   }
 
   // ---------------------------------------------------------------------------
+  // TANKVORGÄNGE
+  // ---------------------------------------------------------------------------
+
+  Future<void> uploadFuelEntry(FuelEntry entry) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase.from('fuel_entries_cloud').upsert({
+      'id': entry.id,
+      'user_id': user.id,
+      'vehicle_id': entry.vehicleId,
+      'date': entry.date.toIso8601String(),
+      'mileage': entry.mileage,
+      'liters': entry.liters,
+      'price_per_liter': entry.pricePerLiter,
+      'total_price': entry.totalPrice,
+      'is_full_tank': entry.isFullTank,
+      'station': entry.station,
+      'notes': entry.notes,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> uploadFuelEntries(List<FuelEntry> entries) async {
+    await _requirePremium();
+
+    if (entries.isEmpty) {
+      return;
+    }
+
+    final user = _currentUser!;
+
+    final updatedAt = DateTime.now().toUtc().toIso8601String();
+
+    final rows = entries.map((entry) {
+      return {
+        'id': entry.id,
+        'user_id': user.id,
+        'vehicle_id': entry.vehicleId,
+        'date': entry.date.toIso8601String(),
+        'mileage': entry.mileage,
+        'liters': entry.liters,
+        'price_per_liter': entry.pricePerLiter,
+        'total_price': entry.totalPrice,
+        'is_full_tank': entry.isFullTank,
+        'station': entry.station,
+        'notes': entry.notes,
+        'updated_at': updatedAt,
+      };
+    }).toList();
+
+    await _supabase.from('fuel_entries_cloud').upsert(rows);
+  }
+
+  Future<List<FuelEntry>> downloadFuelEntries() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('fuel_entries_cloud')
+        .select()
+        .eq('user_id', user.id)
+        .order('date');
+
+    return rows.map<FuelEntry>((row) {
+      return FuelEntry(
+        id: row['id'] as String,
+        vehicleId: row['vehicle_id'] as String,
+        date: DateTime.parse(row['date'] as String),
+        mileage: row['mileage'] as int,
+        liters: (row['liters'] as num).toDouble(),
+        pricePerLiter: (row['price_per_liter'] as num).toDouble(),
+        totalPrice: (row['total_price'] as num).toDouble(),
+        isFullTank: row['is_full_tank'] == true,
+        station: row['station'] as String?,
+        notes: row['notes'] as String?,
+      );
+    }).toList();
+  }
+
+  Future<void> deleteFuelEntry(String fuelEntryId) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase
+        .from('fuel_entries_cloud')
+        .delete()
+        .eq('id', fuelEntryId)
+        .eq('user_id', user.id);
+  }
+
+  // ---------------------------------------------------------------------------
   // TEST / STATUS
   // ---------------------------------------------------------------------------
 
@@ -153,6 +249,19 @@ class CloudSyncService {
 
     final rows = await _supabase
         .from('vehicles_cloud')
+        .select('id')
+        .eq('user_id', user.id);
+
+    return rows.length;
+  }
+
+  Future<int> getCloudFuelEntryCount() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('fuel_entries_cloud')
         .select('id')
         .eq('user_id', user.id);
 

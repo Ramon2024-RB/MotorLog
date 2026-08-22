@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../services/cloud_sync_service.dart';
+import '../../services/fuel_entry_provider.dart';
 import '../../services/premium_provider.dart';
 import '../../services/vehicle_provider.dart';
 
@@ -20,6 +21,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
   bool _isRestoring = false;
 
   int? _cloudVehicleCount;
+  int? _cloudFuelEntryCount;
+
   String? _cloudStatusError;
 
   @override
@@ -34,32 +37,41 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
       return;
     }
 
-    final premiumValue = ref.read(premiumProvider).asData?.value;
+    try {
+      final isPremium = await ref.read(premiumProvider.future);
 
-    if (premiumValue != true) {
+      if (!mounted) {
+        return;
+      }
+
+      if (!isPremium) {
+        setState(() {
+          _cloudVehicleCount = null;
+          _cloudFuelEntryCount = null;
+          _cloudStatusError = null;
+          _isLoadingCloudStatus = false;
+        });
+
+        return;
+      }
+
       setState(() {
-        _cloudVehicleCount = null;
+        _isLoadingCloudStatus = true;
         _cloudStatusError = null;
-        _isLoadingCloudStatus = false;
       });
 
-      return;
-    }
-
-    setState(() {
-      _isLoadingCloudStatus = true;
-      _cloudStatusError = null;
-    });
-
-    try {
-      final count = await _cloudSyncService.getCloudVehicleCount();
+      final results = await Future.wait<int>([
+        _cloudSyncService.getCloudVehicleCount(),
+        _cloudSyncService.getCloudFuelEntryCount(),
+      ]);
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _cloudVehicleCount = count;
+        _cloudVehicleCount = results[0];
+        _cloudFuelEntryCount = results[1];
         _isLoadingCloudStatus = false;
       });
     } catch (error) {
@@ -74,7 +86,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
     }
   }
 
-  Future<void> _restoreVehicles() async {
+  Future<void> _restoreCloudData() async {
     if (_isRestoring) {
       return;
     }
@@ -84,12 +96,12 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
       builder: (dialogContext) {
         return AlertDialog(
           icon: const Icon(Icons.cloud_download_outlined),
-          title: const Text('Fahrzeuge wiederherstellen?'),
+          title: const Text('Cloud-Daten wiederherstellen?'),
           content: const Text(
-            'Die in deiner MotorLog Cloud gespeicherten Fahrzeuge werden '
-            'auf dieses Gerät übertragen.\n\n'
-            'Fahrzeuge mit derselben ID werden aktualisiert. Andere lokale '
-            'Fahrzeuge werden dabei nicht gelöscht.',
+            'Deine in der MotorLog Cloud gespeicherten Fahrzeuge und '
+            'Tankvorgänge werden auf dieses Gerät übertragen.\n\n'
+            'Einträge mit derselben ID werden aktualisiert. Andere lokale '
+            'Daten werden dabei nicht gelöscht.',
             textAlign: TextAlign.center,
           ),
           actions: [
@@ -119,9 +131,17 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
     });
 
     try {
-      final restoredCount = await ref
+      // Fahrzeuge zuerst wiederherstellen.
+      //
+      // Das ist wichtig, weil die Tankvorgänge jeweils über vehicleId
+      // zu einem Fahrzeug gehören.
+      final restoredVehicleCount = await ref
           .read(vehicleProvider.notifier)
           .restoreVehiclesFromCloud();
+
+      final restoredFuelEntryCount = await ref
+          .read(fuelEntryProvider.notifier)
+          .restoreFuelEntriesFromCloud();
 
       if (!mounted) {
         return;
@@ -134,10 +154,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            restoredCount == 1
-                ? '1 Fahrzeug wurde aus der Cloud wiederhergestellt.'
-                : '$restoredCount Fahrzeuge wurden aus der Cloud '
-                      'wiederhergestellt.',
+            'Wiederhergestellt: '
+            '$restoredVehicleCount ${_vehicleLabel(restoredVehicleCount)} '
+            'und $restoredFuelEntryCount '
+            '${_fuelEntryLabel(restoredFuelEntryCount)}.',
           ),
         ),
       );
@@ -156,6 +176,14 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
         SnackBar(content: Text('Wiederherstellung fehlgeschlagen: $error')),
       );
     }
+  }
+
+  String _vehicleLabel(int count) {
+    return count == 1 ? 'Fahrzeug' : 'Fahrzeuge';
+  }
+
+  String _fuelEntryLabel(int count) {
+    return count == 1 ? 'Tankvorgang' : 'Tankvorgänge';
   }
 
   @override
@@ -270,6 +298,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                 return _PremiumStatusCard(
                   isLoading: _isLoadingCloudStatus,
                   cloudVehicleCount: _cloudVehicleCount,
+                  cloudFuelEntryCount: _cloudFuelEntryCount,
                   error: _cloudStatusError,
                   onRetry: _loadCloudStatus,
                 );
@@ -333,7 +362,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Fahrzeuge wiederherstellen',
+                                    'Cloud-Daten wiederherstellen',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 17,
@@ -341,7 +370,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                                   ),
                                   SizedBox(height: 3),
                                   Text(
-                                    'Lade deine gespeicherten Fahrzeuge '
+                                    'Lade deine Fahrzeuge und Tankvorgänge '
                                     'aus der MotorLog Cloud.',
                                   ),
                                 ],
@@ -355,7 +384,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
-                            onPressed: _isRestoring ? null : _restoreVehicles,
+                            onPressed: _isRestoring ? null : _restoreCloudData,
                             icon: _isRestoring
                                 ? const SizedBox(
                                     width: 19,
@@ -417,12 +446,14 @@ class _PremiumStatusCard extends StatelessWidget {
   const _PremiumStatusCard({
     required this.isLoading,
     required this.cloudVehicleCount,
+    required this.cloudFuelEntryCount,
     required this.error,
     required this.onRetry,
   });
 
   final bool isLoading;
   final int? cloudVehicleCount;
+  final int? cloudFuelEntryCount;
   final String? error;
   final VoidCallback onRetry;
 
@@ -492,24 +523,52 @@ class _PremiumStatusCard extends StatelessWidget {
                 ],
               )
             else
-              Row(
+              Column(
                 children: [
-                  Icon(Icons.directions_car_outlined, color: colors.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      cloudVehicleCount == 1
-                          ? '1 Fahrzeug in der Cloud'
-                          : '${cloudVehicleCount ?? 0} Fahrzeuge in der Cloud',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
+                  _CloudCountRow(
+                    icon: Icons.directions_car_outlined,
+                    text: cloudVehicleCount == 1
+                        ? '1 Fahrzeug in der Cloud'
+                        : '${cloudVehicleCount ?? 0} Fahrzeuge in der Cloud',
                   ),
-                  Icon(Icons.cloud_done_outlined, color: colors.primary),
+                  const SizedBox(height: 14),
+                  _CloudCountRow(
+                    icon: Icons.local_gas_station_outlined,
+                    text: cloudFuelEntryCount == 1
+                        ? '1 Tankvorgang in der Cloud'
+                        : '${cloudFuelEntryCount ?? 0} Tankvorgänge in der Cloud',
+                  ),
                 ],
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CloudCountRow extends StatelessWidget {
+  const _CloudCountRow({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        Icon(icon, color: colors.primary),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        Icon(Icons.cloud_done_outlined, color: colors.primary),
+      ],
     );
   }
 }
