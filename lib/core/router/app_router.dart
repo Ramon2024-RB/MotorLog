@@ -16,6 +16,7 @@ import '../../screens/expenses/expenses_page.dart';
 import '../../screens/fuel/fuel_page.dart';
 import '../../screens/maintenance/maintenance_page.dart';
 import '../../screens/premium/premium_page.dart';
+import '../../screens/settings/account_page.dart';
 import '../../screens/settings/cloud_sync_page.dart';
 import '../../screens/settings/settings_page.dart';
 import '../../screens/statistics/vehicle_statistics_page.dart';
@@ -153,6 +154,22 @@ final GoRouter appRouter = GoRouter(
         return const SettingsPage();
       },
       routes: [
+        // ---------------------------------------------------------------------
+        // KONTODATEN
+        // /settings/account
+        // ---------------------------------------------------------------------
+
+        GoRoute(
+          path: 'account',
+          builder: (context, state) {
+            return const AccountPage();
+          },
+        ),
+
+        // ---------------------------------------------------------------------
+        // CLOUD & SYNCHRONISIERUNG
+        // /settings/cloud
+        // ---------------------------------------------------------------------
         GoRoute(
           path: 'cloud',
           builder: (context, state) {

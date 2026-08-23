@@ -223,7 +223,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   title: 'Kontodaten',
                   subtitle: _email,
                   onTap: () {
-                    _showComingSoon('Kontodaten');
+                    context.push('/settings/account');
                   },
                 ),
                 const Divider(height: 1),
