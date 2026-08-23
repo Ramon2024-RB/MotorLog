@@ -17,7 +17,9 @@ import '../../screens/fuel/fuel_page.dart';
 import '../../screens/maintenance/maintenance_page.dart';
 import '../../screens/premium/premium_page.dart';
 import '../../screens/settings/account_page.dart';
+import '../../screens/settings/appearance_page.dart';
 import '../../screens/settings/cloud_sync_page.dart';
+import '../../screens/settings/notification_settings_page.dart';
 import '../../screens/settings/settings_page.dart';
 import '../../screens/statistics/vehicle_statistics_page.dart';
 import '../../screens/tires/tires_page.dart';
@@ -163,6 +165,28 @@ final GoRouter appRouter = GoRouter(
           path: 'account',
           builder: (context, state) {
             return const AccountPage();
+          },
+        ),
+
+        // ---------------------------------------------------------------------
+        // DARSTELLUNG
+        // /settings/appearance
+        // ---------------------------------------------------------------------
+        GoRoute(
+          path: 'appearance',
+          builder: (context, state) {
+            return const AppearancePage();
+          },
+        ),
+
+        // ---------------------------------------------------------------------
+        // BENACHRICHTIGUNGEN
+        // /settings/notifications
+        // ---------------------------------------------------------------------
+        GoRoute(
+          path: 'notifications',
+          builder: (context, state) {
+            return const NotificationSettingsPage();
           },
         ),
 

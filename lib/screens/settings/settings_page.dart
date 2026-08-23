@@ -251,16 +251,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   title: 'Benachrichtigungen',
                   subtitle: 'Erinnerungen und Hinweise verwalten',
                   onTap: () {
-                    _showComingSoon('Benachrichtigungseinstellungen');
+                    context.push('/settings/notifications');
                   },
                 ),
                 const Divider(height: 1),
                 _SettingsTile(
                   icon: Icons.palette_outlined,
                   title: 'Darstellung',
-                  subtitle: 'Design und Erscheinungsbild',
+                  subtitle: 'Systemstandard, Hell oder Dunkel',
                   onTap: () {
-                    _showComingSoon('Darstellungseinstellungen');
+                    context.push('/settings/appearance');
                   },
                 ),
                 const Divider(height: 1),
@@ -277,7 +277,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
             const SizedBox(height: 28),
 
-            const _SectionTitle(title: 'Konto'),
+            const _SectionTitle(title: 'Anmeldung'),
 
             const SizedBox(height: 12),
 

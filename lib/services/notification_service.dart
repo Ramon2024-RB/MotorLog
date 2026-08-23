@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -10,6 +11,10 @@ class NotificationService {
   NotificationService._();
 
   static final NotificationService instance = NotificationService._();
+
+  static const _maintenanceKey = 'notifications_maintenance_enabled';
+  static const _dateKey = 'notifications_date_enabled';
+  static const _mileageKey = 'notifications_mileage_enabled';
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
@@ -115,21 +120,47 @@ class NotificationService {
     return true;
   }
 
+  Future<bool> _maintenanceNotificationsEnabled() async {
+    final preferences = await SharedPreferences.getInstance();
+
+    return preferences.getBool(_maintenanceKey) ?? true;
+  }
+
+  Future<bool> _dateNotificationsEnabled() async {
+    final preferences = await SharedPreferences.getInstance();
+
+    return preferences.getBool(_dateKey) ?? true;
+  }
+
+  Future<bool> _mileageNotificationsEnabled() async {
+    final preferences = await SharedPreferences.getInstance();
+
+    return preferences.getBool(_mileageKey) ?? true;
+  }
+
+  Future<bool> areMaintenanceNotificationsEnabled() async {
+    return _maintenanceNotificationsEnabled();
+  }
+
+  Future<bool> areDateNotificationsEnabled() async {
+    return _dateNotificationsEnabled();
+  }
+
+  Future<bool> areMileageNotificationsEnabled() async {
+    return _mileageNotificationsEnabled();
+  }
+
   int _legacyNotificationId(String maintenanceId) {
     var hash = 0;
 
     for (final codeUnit in maintenanceId.codeUnits) {
       hash = 0x1fffffff & (hash + codeUnit);
-
       hash = 0x1fffffff & (hash + ((0x0007ffff & hash) << 10));
-
       hash ^= hash >> 6;
     }
 
     hash = 0x1fffffff & (hash + ((0x03ffffff & hash) << 3));
-
     hash ^= hash >> 11;
-
     hash = 0x1fffffff & (hash + ((0x00003fff & hash) << 15));
 
     return hash & 0x7fffffff;
@@ -150,12 +181,11 @@ class NotificationService {
   }
 
   int _mileageAdvanceNotificationId(String maintenanceId) {
-    return (_legacyNotificationId('mileage_advance_$maintenanceId') &
-        0x7fffffff);
+    return _legacyNotificationId('mileage_advance_$maintenanceId') & 0x7fffffff;
   }
 
   int _mileageDueNotificationId(String maintenanceId) {
-    return (_legacyNotificationId('mileage_due_$maintenanceId') & 0x7fffffff);
+    return _legacyNotificationId('mileage_due_$maintenanceId') & 0x7fffffff;
   }
 
   NotificationDetails _maintenanceNotificationDetails() {
@@ -189,11 +219,22 @@ class NotificationService {
 
     await cancelMaintenanceNotification(entry.id);
 
+    final maintenanceEnabled = await _maintenanceNotificationsEnabled();
+    final dateEnabled = await _dateNotificationsEnabled();
+
+    if (!maintenanceEnabled || !dateEnabled) {
+      debugPrint(
+        'MotorLog: Termin-Erinnerungen sind deaktiviert. '
+        'Für "${entry.title}" wird keine Benachrichtigung geplant.',
+      );
+
+      return;
+    }
+
     final nextDate = entry.nextDate;
 
     if (nextDate == null) {
       debugPrint('MotorLog: ${entry.title} besitzt kein Fälligkeitsdatum.');
-
       return;
     }
 
@@ -229,12 +270,6 @@ class NotificationService {
       debugPrint('MotorLog: Vorab-Erinnerung geplant');
       debugPrint('Wartung: ${entry.title}');
       debugPrint('Zeitpunkt: $advanceDate');
-    } else {
-      debugPrint(
-        'MotorLog: Keine 7-Tage-Erinnerung für '
-        '${entry.title}, da der Zeitpunkt bereits '
-        'erreicht oder vergangen ist.',
-      );
     }
 
     if (dueDate.isAfter(now)) {
@@ -253,12 +288,6 @@ class NotificationService {
       debugPrint('MotorLog: Fälligkeits-Erinnerung geplant');
       debugPrint('Wartung: ${entry.title}');
       debugPrint('Zeitpunkt: $dueDate');
-    } else {
-      debugPrint(
-        'MotorLog: Keine Fälligkeits-Erinnerung für '
-        '${entry.title}, da der Termin bereits '
-        'erreicht oder vergangen ist.',
-      );
     }
 
     debugPrint('========================================');
@@ -276,6 +305,17 @@ class NotificationService {
     required int currentMileage,
   }) async {
     await initialize();
+
+    final maintenanceEnabled = await _maintenanceNotificationsEnabled();
+    final mileageEnabled = await _mileageNotificationsEnabled();
+
+    if (!maintenanceEnabled || !mileageEnabled) {
+      debugPrint(
+        'MotorLog: Kilometer-Erinnerungen sind deaktiviert. '
+        'Keine Vorwarnung für "${entry.title}".',
+      );
+      return;
+    }
 
     final nextMileage = entry.nextMileage;
 
@@ -311,6 +351,17 @@ class NotificationService {
     required int currentMileage,
   }) async {
     await initialize();
+
+    final maintenanceEnabled = await _maintenanceNotificationsEnabled();
+    final mileageEnabled = await _mileageNotificationsEnabled();
+
+    if (!maintenanceEnabled || !mileageEnabled) {
+      debugPrint(
+        'MotorLog: Kilometer-Erinnerungen sind deaktiviert. '
+        'Keine Fälligkeitsmeldung für "${entry.title}".',
+      );
+      return;
+    }
 
     final nextMileage = entry.nextMileage;
 
@@ -353,6 +404,26 @@ class NotificationService {
     debugPrint('MotorLog Wartungsbenachrichtigungen gelöscht: $maintenanceId');
   }
 
+  Future<void> cancelMileageNotifications(String maintenanceId) async {
+    await initialize();
+
+    await _notifications.cancel(
+      id: _mileageAdvanceNotificationId(maintenanceId),
+    );
+
+    await _notifications.cancel(id: _mileageDueNotificationId(maintenanceId));
+
+    debugPrint('MotorLog Kilometerbenachrichtigungen gelöscht: $maintenanceId');
+  }
+
+  Future<void> cancelAllNotifications() async {
+    await initialize();
+
+    await _notifications.cancelAll();
+
+    debugPrint('MotorLog: Alle Benachrichtigungen wurden gelöscht.');
+  }
+
   Future<void> printPendingNotifications() async {
     await initialize();
 
@@ -379,6 +450,14 @@ class NotificationService {
 
   Future<void> showTestNotification() async {
     await initialize();
+
+    final granted = await requestPermissions();
+
+    if (!granted) {
+      throw StateError(
+        'MotorLog hat keine Berechtigung für Benachrichtigungen.',
+      );
+    }
 
     const notificationDetails = NotificationDetails(
       android: AndroidNotificationDetails(

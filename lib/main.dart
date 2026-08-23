@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/database/app_database.dart';
 import 'core/router/app_router.dart';
 import 'services/notification_service.dart';
+import 'services/theme_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,17 +70,40 @@ class _MotorLogRootState extends State<MotorLogRoot> {
   }
 }
 
-class MotorLogApp extends StatelessWidget {
+class MotorLogApp extends ConsumerWidget {
   const MotorLogApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeAsync = ref.watch(themeProvider);
+
+    final themeMode = themeAsync.value ?? ThemeMode.system;
+
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'MotorLog',
       routerConfig: appRouter,
+      themeMode: themeMode,
+
+      // -----------------------------------------------------------------------
+      // HELLES DESIGN
+      // -----------------------------------------------------------------------
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF176B5B)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF176B5B),
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+      ),
+
+      // -----------------------------------------------------------------------
+      // DUNKLES DESIGN
+      // -----------------------------------------------------------------------
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF176B5B),
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
       ),
     );
