@@ -174,7 +174,11 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await _supabase.auth.signInWithOAuth(OAuthProvider.google);
+      await _supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: 'motorlog://login-callback/',
+        authScreenLaunchMode: LaunchMode.externalApplication,
+      );
     } on AuthException catch (error) {
       if (!mounted) {
         return;

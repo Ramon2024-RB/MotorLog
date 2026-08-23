@@ -27,11 +27,33 @@ class AuthStateNotifier extends ChangeNotifier {
     _subscription = Supabase.instance.client.auth.onAuthStateChange.listen((
       data,
     ) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        _isPasswordRecovery = true;
+      }
+
+      if (data.event == AuthChangeEvent.signedOut ||
+          data.event == AuthChangeEvent.userUpdated) {
+        _isPasswordRecovery = false;
+      }
+
       notifyListeners();
     });
   }
 
   late final StreamSubscription<AuthState> _subscription;
+
+  bool _isPasswordRecovery = false;
+
+  bool get isPasswordRecovery => _isPasswordRecovery;
+
+  void finishPasswordRecovery() {
+    if (!_isPasswordRecovery) {
+      return;
+    }
+
+    _isPasswordRecovery = false;
+    notifyListeners();
+  }
 
   @override
   void dispose() {
@@ -57,6 +79,14 @@ final GoRouter appRouter = GoRouter(
 
     final isPublicAuthPage =
         isLoginPage || isRegisterPage || isResetPasswordPage;
+
+    if (authStateNotifier.isPasswordRecovery) {
+      if (!isResetPasswordPage) {
+        return '/reset-password';
+      }
+
+      return null;
+    }
 
     if (!isLoggedIn && !isPublicAuthPage) {
       return '/login';
