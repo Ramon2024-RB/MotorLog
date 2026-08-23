@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as path;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/expense.dart';
@@ -6,11 +9,18 @@ import '../models/maintenance_entry.dart';
 import '../models/tire_mount_history.dart';
 import '../models/tire_set.dart';
 import '../models/vehicle.dart';
+import '../models/vehicle_document.dart';
+import 'document_storage_service.dart';
 
 class CloudSyncService {
   CloudSyncService._();
 
   static final CloudSyncService instance = CloudSyncService._();
+
+  static const String _documentBucket = 'motorlog-documents';
+
+  final DocumentStorageService _documentStorageService =
+      const DocumentStorageService();
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
@@ -657,6 +667,138 @@ class CloudSyncService {
   }
 
   // ---------------------------------------------------------------------------
+  // DOKUMENTE
+  // ---------------------------------------------------------------------------
+
+  Future<void> uploadDocument(VehicleDocument document) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    String? storagePath;
+
+    final localFilePath = document.filePath;
+
+    if (localFilePath != null && localFilePath.trim().isNotEmpty) {
+      final resolvedFilePath = await _documentStorageService.resolveFilePath(
+        localFilePath,
+      );
+
+      if (resolvedFilePath != null) {
+        final file = File(resolvedFilePath);
+
+        if (await file.exists()) {
+          final originalFileName = path.basename(resolvedFilePath);
+
+          storagePath = '${user.id}/${document.id}/$originalFileName';
+
+          await _supabase.storage
+              .from(_documentBucket)
+              .upload(
+                storagePath,
+                file,
+                fileOptions: const FileOptions(upsert: true),
+              );
+        }
+      }
+    }
+
+    await _supabase.from('vehicle_documents_cloud').upsert({
+      'id': document.id,
+      'user_id': user.id,
+      'vehicle_id': document.vehicleId,
+      'title': document.title,
+      'category': document.category,
+      'date': document.date.toIso8601String(),
+      'notes': document.notes,
+      'storage_path': storagePath,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> uploadDocuments(List<VehicleDocument> documents) async {
+    await _requirePremium();
+
+    if (documents.isEmpty) {
+      return;
+    }
+
+    for (final document in documents) {
+      await uploadDocument(document);
+    }
+  }
+
+  Future<List<VehicleDocument>> downloadDocuments() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('vehicle_documents_cloud')
+        .select()
+        .eq('user_id', user.id)
+        .order('date');
+
+    final documents = <VehicleDocument>[];
+
+    for (final row in rows) {
+      final storagePath = row['storage_path'] as String?;
+
+      String? localFilePath;
+
+      if (storagePath != null && storagePath.trim().isNotEmpty) {
+        final bytes = await _supabase.storage
+            .from(_documentBucket)
+            .download(storagePath);
+
+        localFilePath = await _documentStorageService.saveCloudFile(
+          bytes: bytes,
+          originalFileName: path.basename(storagePath),
+        );
+      }
+
+      documents.add(
+        VehicleDocument(
+          id: row['id'] as String,
+          vehicleId: row['vehicle_id'] as String,
+          title: row['title'] as String,
+          category: row['category'] as String,
+          date: DateTime.parse(row['date'] as String),
+          filePath: localFilePath,
+          notes: row['notes'] as String?,
+        ),
+      );
+    }
+
+    return documents;
+  }
+
+  Future<void> deleteDocument(String documentId) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final row = await _supabase
+        .from('vehicle_documents_cloud')
+        .select('storage_path')
+        .eq('id', documentId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+    final storagePath = row?['storage_path'] as String?;
+
+    if (storagePath != null && storagePath.trim().isNotEmpty) {
+      await _supabase.storage.from(_documentBucket).remove([storagePath]);
+    }
+
+    await _supabase
+        .from('vehicle_documents_cloud')
+        .delete()
+        .eq('id', documentId)
+        .eq('user_id', user.id);
+  }
+
+  // ---------------------------------------------------------------------------
   // TEST / STATUS
   // ---------------------------------------------------------------------------
 
@@ -732,6 +874,19 @@ class CloudSyncService {
 
     final rows = await _supabase
         .from('tire_mount_history_cloud')
+        .select('id')
+        .eq('user_id', user.id);
+
+    return rows.length;
+  }
+
+  Future<int> getCloudDocumentCount() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('vehicle_documents_cloud')
         .select('id')
         .eq('user_id', user.id);
 

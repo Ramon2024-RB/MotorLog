@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../services/cloud_sync_service.dart';
+import '../../services/document_provider.dart';
 import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
 import '../../services/maintenance_provider.dart';
@@ -30,6 +31,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
   int? _cloudMaintenanceEntryCount;
   int? _cloudTireSetCount;
   int? _cloudTireMountHistoryCount;
+  int? _cloudDocumentCount;
 
   String? _cloudStatusError;
 
@@ -64,6 +66,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           _cloudMaintenanceEntryCount = null;
           _cloudTireSetCount = null;
           _cloudTireMountHistoryCount = null;
+          _cloudDocumentCount = null;
           _cloudStatusError = null;
           _isLoadingCloudStatus = false;
         });
@@ -83,6 +86,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
         _cloudSyncService.getCloudMaintenanceEntryCount(),
         _cloudSyncService.getCloudTireSetCount(),
         _cloudSyncService.getCloudTireMountHistoryCount(),
+        _cloudSyncService.getCloudDocumentCount(),
       ]);
 
       if (!mounted) {
@@ -96,6 +100,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
         _cloudMaintenanceEntryCount = results[3];
         _cloudTireSetCount = results[4];
         _cloudTireMountHistoryCount = results[5];
+        _cloudDocumentCount = results[6];
         _isLoadingCloudStatus = false;
       });
     } catch (error) {
@@ -127,8 +132,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           title: const Text('Lokale Daten sichern?'),
           content: const Text(
             'Deine lokal gespeicherten Fahrzeuge, Tankvorgänge, Kosten, '
-            'Wartungen, Reifensätze und Reifenwechsel-Historien werden in '
-            'der MotorLog Cloud gesichert.\n\n'
+            'Wartungen, Reifensätze, Reifenwechsel-Historien und Dokumente '
+            'werden in der MotorLog Cloud gesichert.\n\n'
+            'Anhänge deiner Dokumente werden ebenfalls sicher in der '
+            'MotorLog Cloud gespeichert.\n\n'
             'Bereits vorhandene Cloud-Einträge mit derselben ID werden '
             'aktualisiert.',
             textAlign: TextAlign.center,
@@ -181,6 +188,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           .uploadAllMaintenanceEntriesToCloud();
 
       await ref.read(tireProvider.notifier).uploadAllTireDataToCloud();
+
+      await ref.read(documentProvider.notifier).uploadAllDocumentsToCloud();
 
       if (!mounted) {
         return;
@@ -235,8 +244,11 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           title: const Text('Cloud-Daten wiederherstellen?'),
           content: const Text(
             'Deine in der MotorLog Cloud gespeicherten Fahrzeuge, '
-            'Tankvorgänge, Kosten, Wartungen, Reifensätze und '
-            'Reifenwechsel-Historien werden auf dieses Gerät übertragen.\n\n'
+            'Tankvorgänge, Kosten, Wartungen, Reifensätze, '
+            'Reifenwechsel-Historien und Dokumente werden auf dieses Gerät '
+            'übertragen.\n\n'
+            'Gesicherte Dokumentanhänge werden ebenfalls heruntergeladen '
+            'und wieder lokal gespeichert.\n\n'
             'Einträge mit derselben ID werden aktualisiert. Andere lokale '
             'Daten werden dabei nicht gelöscht.',
             textAlign: TextAlign.center,
@@ -292,6 +304,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           .read(tireProvider.notifier)
           .restoreTireDataFromCloud();
 
+      final restoredDocumentCount = await ref
+          .read(documentProvider.notifier)
+          .restoreDocumentsFromCloud();
+
       if (!mounted) {
         return;
       }
@@ -309,9 +325,11 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
             '${_fuelEntryLabel(restoredFuelEntryCount)}, '
             '$restoredExpenseCount ${_expenseLabel(restoredExpenseCount)}, '
             '$restoredMaintenanceCount '
-            '${_maintenanceLabel(restoredMaintenanceCount)} und '
+            '${_maintenanceLabel(restoredMaintenanceCount)}, '
             '$restoredTireSetCount '
-            '${_tireSetLabel(restoredTireSetCount)}.',
+            '${_tireSetLabel(restoredTireSetCount)} und '
+            '$restoredDocumentCount '
+            '${_documentLabel(restoredDocumentCount)}.',
           ),
         ),
       );
@@ -350,6 +368,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
 
   String _tireSetLabel(int count) {
     return count == 1 ? 'Reifensatz' : 'Reifensätze';
+  }
+
+  String _documentLabel(int count) {
+    return count == 1 ? 'Dokument' : 'Dokumente';
   }
 
   @override
@@ -465,6 +487,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                   cloudMaintenanceEntryCount: _cloudMaintenanceEntryCount,
                   cloudTireSetCount: _cloudTireSetCount,
                   cloudTireMountHistoryCount: _cloudTireMountHistoryCount,
+                  cloudDocumentCount: _cloudDocumentCount,
                   error: _cloudStatusError,
                   onRetry: _loadCloudStatus,
                 );
@@ -531,8 +554,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                                   SizedBox(height: 3),
                                   Text(
                                     'Sichere Fahrzeuge, Tankvorgänge, Kosten, '
-                                    'Wartungen und Reifendaten dieses Geräts '
-                                    'in der Cloud.',
+                                    'Wartungen, Reifendaten und Dokumente '
+                                    'dieses Geräts in der Cloud.',
                                   ),
                                 ],
                               ),
@@ -631,8 +654,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                                   SizedBox(height: 3),
                                   Text(
                                     'Lade deine Fahrzeuge, Tankvorgänge, '
-                                    'Kosten, Wartungen und Reifendaten aus '
-                                    'der MotorLog Cloud.',
+                                    'Kosten, Wartungen, Reifendaten und '
+                                    'Dokumente aus der MotorLog Cloud.',
                                   ),
                                 ],
                               ),
@@ -710,6 +733,7 @@ class _PremiumStatusCard extends StatelessWidget {
     required this.cloudMaintenanceEntryCount,
     required this.cloudTireSetCount,
     required this.cloudTireMountHistoryCount,
+    required this.cloudDocumentCount,
     required this.error,
     required this.onRetry,
   });
@@ -721,6 +745,7 @@ class _PremiumStatusCard extends StatelessWidget {
   final int? cloudMaintenanceEntryCount;
   final int? cloudTireSetCount;
   final int? cloudTireMountHistoryCount;
+  final int? cloudDocumentCount;
   final String? error;
   final VoidCallback onRetry;
 
@@ -830,6 +855,13 @@ class _PremiumStatusCard extends StatelessWidget {
                     text: cloudTireMountHistoryCount == 1
                         ? '1 Reifenwechsel in der Cloud'
                         : '${cloudTireMountHistoryCount ?? 0} Reifenwechsel in der Cloud',
+                  ),
+                  const SizedBox(height: 14),
+                  _CloudCountRow(
+                    icon: Icons.description_outlined,
+                    text: cloudDocumentCount == 1
+                        ? '1 Dokument in der Cloud'
+                        : '${cloudDocumentCount ?? 0} Dokumente in der Cloud',
                   ),
                 ],
               ),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -46,6 +47,35 @@ class DocumentStorageService {
     final destinationPath = path.join(documentsDirectory.path, fileName);
 
     await sourceFile.copy(destinationPath);
+
+    return path.join(_documentsFolderName, fileName);
+  }
+
+  /// Speichert aus der Cloud heruntergeladene Datei-Bytes dauerhaft
+  /// im MotorLog-Dokumentenordner.
+  ///
+  /// [originalFileName] wird nur verwendet, um die ursprüngliche
+  /// Dateiendung zu übernehmen.
+  ///
+  /// Zurückgegeben wird wieder ausschließlich der relative Pfad,
+  /// zum Beispiel:
+  ///
+  /// vehicle_documents/abc123.pdf
+  Future<String> saveCloudFile({
+    required Uint8List bytes,
+    required String originalFileName,
+  }) async {
+    final documentsDirectory = await _getDocumentsDirectory();
+
+    final extension = path.extension(originalFileName);
+
+    final fileName = '${const Uuid().v4()}$extension';
+
+    final destinationPath = path.join(documentsDirectory.path, fileName);
+
+    final destinationFile = File(destinationPath);
+
+    await destinationFile.writeAsBytes(bytes, flush: true);
 
     return path.join(_documentsFolderName, fileName);
   }
