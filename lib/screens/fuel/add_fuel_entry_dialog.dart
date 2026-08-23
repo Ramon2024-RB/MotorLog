@@ -440,23 +440,26 @@ class _AddFuelEntryDialogState extends ConsumerState<AddFuelEntryDialog> {
                       margin: EdgeInsets.zero,
                       child: Column(
                         children: [
-                          SwitchListTile.adaptive(
-                            value: _isFullTank,
-                            onChanged: _isSaving
-                                ? null
-                                : (value) {
-                                    setState(() {
-                                      _isFullTank = value;
-                                    });
-                                  },
-                            title: const Text('Vollgetankt'),
-                            subtitle: Text(
-                              _isFullTank
-                                  ? 'Der Tank wurde vollständig gefüllt.'
-                                  : 'Es handelt sich um eine Teilbetankung.',
+                          Material(
+                            type: MaterialType.transparency,
+                            child: SwitchListTile.adaptive(
+                              value: _isFullTank,
+                              onChanged: _isSaving
+                                  ? null
+                                  : (value) {
+                                      setState(() {
+                                        _isFullTank = value;
+                                      });
+                                    },
+                              title: const Text('Vollgetankt'),
+                              subtitle: Text(
+                                _isFullTank
+                                    ? 'Der Tank wurde vollständig gefüllt.'
+                                    : 'Es handelt sich um eine Teilbetankung.',
+                              ),
+                              secondary: const Icon(Icons.local_gas_station),
+                              contentPadding: EdgeInsets.zero,
                             ),
-                            secondary: const Icon(Icons.local_gas_station),
-                            contentPadding: EdgeInsets.zero,
                           ),
                           const SizedBox(height: 16),
                           MotorLogTextField(
