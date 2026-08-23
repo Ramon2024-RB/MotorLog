@@ -16,11 +16,16 @@ import '../../screens/expenses/expenses_page.dart';
 import '../../screens/fuel/fuel_page.dart';
 import '../../screens/maintenance/maintenance_page.dart';
 import '../../screens/premium/premium_page.dart';
+import '../../screens/settings/about_page.dart';
 import '../../screens/settings/account_page.dart';
 import '../../screens/settings/appearance_page.dart';
 import '../../screens/settings/cloud_sync_page.dart';
+import '../../screens/settings/faq_page.dart';
 import '../../screens/settings/notification_settings_page.dart';
+import '../../screens/settings/privacy_page.dart';
 import '../../screens/settings/settings_page.dart';
+import '../../screens/settings/support_page.dart';
+import '../../screens/settings/terms_page.dart';
 import '../../screens/statistics/vehicle_statistics_page.dart';
 import '../../screens/tires/tires_page.dart';
 import '../../screens/vehicles/vehicle_detail_page.dart';
@@ -199,6 +204,63 @@ final GoRouter appRouter = GoRouter(
           builder: (context, state) {
             return const CloudSyncPage();
           },
+        ),
+
+        // ---------------------------------------------------------------------
+        // ÜBER MOTORLOG
+        // /settings/about
+        // ---------------------------------------------------------------------
+        GoRoute(
+          path: 'about',
+          builder: (context, state) {
+            return const AboutPage();
+          },
+          routes: [
+            // -----------------------------------------------------------------
+            // DATENSCHUTZ
+            // /settings/about/privacy
+            // -----------------------------------------------------------------
+
+            GoRoute(
+              path: 'privacy',
+              builder: (context, state) {
+                return const PrivacyPage();
+              },
+            ),
+
+            // -----------------------------------------------------------------
+            // NUTZUNGSBEDINGUNGEN
+            // /settings/about/terms
+            // -----------------------------------------------------------------
+            GoRoute(
+              path: 'terms',
+              builder: (context, state) {
+                return const TermsPage();
+              },
+            ),
+
+            // -----------------------------------------------------------------
+            // HILFE & FAQ
+            // /settings/about/faq
+            // -----------------------------------------------------------------
+            GoRoute(
+              path: 'faq',
+              builder: (context, state) {
+                return const FaqPage();
+              },
+            ),
+
+            // -----------------------------------------------------------------
+            // KONTAKT & SUPPORT
+            // /settings/about/support
+            // -----------------------------------------------------------------
+            GoRoute(
+              path: 'support',
+              builder: (context, state) {
+                return const SupportPage();
+              },
+            ),
+          ],
         ),
       ],
     ),

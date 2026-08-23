@@ -105,14 +105,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature bauen wir in einem der nächsten Schritte ein.'),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -269,7 +261,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   title: 'Über MotorLog',
                   subtitle: 'Version, Datenschutz und Informationen',
                   onTap: () {
-                    _showComingSoon('Über MotorLog');
+                    context.push('/settings/about');
                   },
                 ),
               ],
