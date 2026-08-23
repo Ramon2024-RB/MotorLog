@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
+import '../../services/maintenance_provider.dart';
 import '../../services/premium_provider.dart';
 import '../../services/vehicle_provider.dart';
 
@@ -25,6 +26,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
   int? _cloudVehicleCount;
   int? _cloudFuelEntryCount;
   int? _cloudExpenseCount;
+  int? _cloudMaintenanceEntryCount;
 
   String? _cloudStatusError;
 
@@ -56,6 +58,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           _cloudVehicleCount = null;
           _cloudFuelEntryCount = null;
           _cloudExpenseCount = null;
+          _cloudMaintenanceEntryCount = null;
           _cloudStatusError = null;
           _isLoadingCloudStatus = false;
         });
@@ -72,6 +75,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
         _cloudSyncService.getCloudVehicleCount(),
         _cloudSyncService.getCloudFuelEntryCount(),
         _cloudSyncService.getCloudExpenseCount(),
+        _cloudSyncService.getCloudMaintenanceEntryCount(),
       ]);
 
       if (!mounted) {
@@ -82,6 +86,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
         _cloudVehicleCount = results[0];
         _cloudFuelEntryCount = results[1];
         _cloudExpenseCount = results[2];
+        _cloudMaintenanceEntryCount = results[3];
         _isLoadingCloudStatus = false;
       });
     } catch (error) {
@@ -112,8 +117,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           icon: const Icon(Icons.cloud_upload_outlined),
           title: const Text('Lokale Daten sichern?'),
           content: const Text(
-            'Deine lokal gespeicherten Fahrzeuge, Tankvorgänge und Kosten '
-            'werden in der MotorLog Cloud gesichert.\n\n'
+            'Deine lokal gespeicherten Fahrzeuge, Tankvorgänge, Kosten '
+            'und Wartungen werden in der MotorLog Cloud gesichert.\n\n'
             'Bereits vorhandene Cloud-Einträge mit derselben ID werden '
             'aktualisiert.',
             textAlign: TextAlign.center,
@@ -153,13 +158,17 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
         );
       }
 
-      // Reihenfolge:
-      // Erst Fahrzeuge, danach abhängige Tankvorgänge und Kosten.
+      // Fahrzeuge zuerst sichern, danach die Datensätze,
+      // die über vehicleId zu einem Fahrzeug gehören.
       await ref.read(vehicleProvider.notifier).uploadAllVehiclesToCloud();
 
       await ref.read(fuelEntryProvider.notifier).uploadAllFuelEntriesToCloud();
 
       await ref.read(expenseProvider.notifier).uploadAllExpensesToCloud();
+
+      await ref
+          .read(maintenanceProvider.notifier)
+          .uploadAllMaintenanceEntriesToCloud();
 
       if (!mounted) {
         return;
@@ -214,7 +223,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           title: const Text('Cloud-Daten wiederherstellen?'),
           content: const Text(
             'Deine in der MotorLog Cloud gespeicherten Fahrzeuge, '
-            'Tankvorgänge und Kosten werden auf dieses Gerät übertragen.\n\n'
+            'Tankvorgänge, Kosten und Wartungen werden auf dieses Gerät '
+            'übertragen.\n\n'
             'Einträge mit derselben ID werden aktualisiert. Andere lokale '
             'Daten werden dabei nicht gelöscht.',
             textAlign: TextAlign.center,
@@ -248,8 +258,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
     try {
       // Fahrzeuge zuerst wiederherstellen.
       //
-      // Tankvorgänge und Kosten gehören jeweils über vehicleId
-      // zu einem Fahrzeug.
+      // Tankvorgänge, Kosten und Wartungen gehören jeweils
+      // über vehicleId zu einem Fahrzeug.
       final restoredVehicleCount = await ref
           .read(vehicleProvider.notifier)
           .restoreVehiclesFromCloud();
@@ -261,6 +271,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
       final restoredExpenseCount = await ref
           .read(expenseProvider.notifier)
           .restoreExpensesFromCloud();
+
+      final restoredMaintenanceCount = await ref
+          .read(maintenanceProvider.notifier)
+          .restoreMaintenanceEntriesFromCloud();
 
       if (!mounted) {
         return;
@@ -276,8 +290,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
             'Wiederhergestellt: '
             '$restoredVehicleCount ${_vehicleLabel(restoredVehicleCount)}, '
             '$restoredFuelEntryCount '
-            '${_fuelEntryLabel(restoredFuelEntryCount)} und '
-            '$restoredExpenseCount ${_expenseLabel(restoredExpenseCount)}.',
+            '${_fuelEntryLabel(restoredFuelEntryCount)}, '
+            '$restoredExpenseCount ${_expenseLabel(restoredExpenseCount)} '
+            'und $restoredMaintenanceCount '
+            '${_maintenanceLabel(restoredMaintenanceCount)}.',
           ),
         ),
       );
@@ -308,6 +324,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
 
   String _expenseLabel(int count) {
     return count == 1 ? 'Kosteneintrag' : 'Kosteneinträge';
+  }
+
+  String _maintenanceLabel(int count) {
+    return count == 1 ? 'Wartung' : 'Wartungen';
   }
 
   @override
@@ -424,6 +444,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                   cloudVehicleCount: _cloudVehicleCount,
                   cloudFuelEntryCount: _cloudFuelEntryCount,
                   cloudExpenseCount: _cloudExpenseCount,
+                  cloudMaintenanceEntryCount: _cloudMaintenanceEntryCount,
                   error: _cloudStatusError,
                   onRetry: _loadCloudStatus,
                 );
@@ -493,8 +514,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                                   ),
                                   SizedBox(height: 3),
                                   Text(
-                                    'Sichere Fahrzeuge, Tankvorgänge und '
-                                    'Kosten dieses Geräts in der Cloud.',
+                                    'Sichere Fahrzeuge, Tankvorgänge, Kosten '
+                                    'und Wartungen dieses Geräts in der Cloud.',
                                   ),
                                 ],
                               ),
@@ -596,8 +617,9 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                                   ),
                                   SizedBox(height: 3),
                                   Text(
-                                    'Lade deine Fahrzeuge, Tankvorgänge und '
-                                    'Kosten aus der MotorLog Cloud.',
+                                    'Lade deine Fahrzeuge, Tankvorgänge, '
+                                    'Kosten und Wartungen aus der '
+                                    'MotorLog Cloud.',
                                   ),
                                 ],
                               ),
@@ -674,6 +696,7 @@ class _PremiumStatusCard extends StatelessWidget {
     required this.cloudVehicleCount,
     required this.cloudFuelEntryCount,
     required this.cloudExpenseCount,
+    required this.cloudMaintenanceEntryCount,
     required this.error,
     required this.onRetry,
   });
@@ -682,6 +705,7 @@ class _PremiumStatusCard extends StatelessWidget {
   final int? cloudVehicleCount;
   final int? cloudFuelEntryCount;
   final int? cloudExpenseCount;
+  final int? cloudMaintenanceEntryCount;
   final String? error;
   final VoidCallback onRetry;
 
@@ -770,6 +794,13 @@ class _PremiumStatusCard extends StatelessWidget {
                     text: cloudExpenseCount == 1
                         ? '1 Kosteneintrag in der Cloud'
                         : '${cloudExpenseCount ?? 0} Kosteneinträge in der Cloud',
+                  ),
+                  const SizedBox(height: 14),
+                  _CloudCountRow(
+                    icon: Icons.build_outlined,
+                    text: cloudMaintenanceEntryCount == 1
+                        ? '1 Wartung in der Cloud'
+                        : '${cloudMaintenanceEntryCount ?? 0} Wartungen in der Cloud',
                   ),
                 ],
               ),

@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/expense.dart';
 import '../models/fuel_entry.dart';
+import '../models/maintenance_entry.dart';
 import '../models/vehicle.dart';
 
 class CloudSyncService {
@@ -325,6 +326,108 @@ class CloudSyncService {
   }
 
   // ---------------------------------------------------------------------------
+  // WARTUNGEN
+  // ---------------------------------------------------------------------------
+
+  Future<void> uploadMaintenanceEntry(MaintenanceEntry entry) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase.from('maintenance_entries_cloud').upsert({
+      'id': entry.id,
+      'user_id': user.id,
+      'vehicle_id': entry.vehicleId,
+      'date': entry.date.toIso8601String(),
+      'category': entry.category,
+      'title': entry.title,
+      'cost': entry.cost,
+      'mileage': entry.mileage,
+      'notes': entry.notes,
+      'next_mileage': entry.nextMileage,
+      'next_date': entry.nextDate?.toIso8601String(),
+      'mileage_advance_notified': entry.mileageAdvanceNotified,
+      'mileage_due_notified': entry.mileageDueNotified,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> uploadMaintenanceEntries(List<MaintenanceEntry> entries) async {
+    await _requirePremium();
+
+    if (entries.isEmpty) {
+      return;
+    }
+
+    final user = _currentUser!;
+    final updatedAt = DateTime.now().toUtc().toIso8601String();
+
+    final rows = entries.map((entry) {
+      return {
+        'id': entry.id,
+        'user_id': user.id,
+        'vehicle_id': entry.vehicleId,
+        'date': entry.date.toIso8601String(),
+        'category': entry.category,
+        'title': entry.title,
+        'cost': entry.cost,
+        'mileage': entry.mileage,
+        'notes': entry.notes,
+        'next_mileage': entry.nextMileage,
+        'next_date': entry.nextDate?.toIso8601String(),
+        'mileage_advance_notified': entry.mileageAdvanceNotified,
+        'mileage_due_notified': entry.mileageDueNotified,
+        'updated_at': updatedAt,
+      };
+    }).toList();
+
+    await _supabase.from('maintenance_entries_cloud').upsert(rows);
+  }
+
+  Future<List<MaintenanceEntry>> downloadMaintenanceEntries() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('maintenance_entries_cloud')
+        .select()
+        .eq('user_id', user.id)
+        .order('date');
+
+    return rows.map<MaintenanceEntry>((row) {
+      return MaintenanceEntry(
+        id: row['id'] as String,
+        vehicleId: row['vehicle_id'] as String,
+        date: DateTime.parse(row['date'] as String),
+        category: row['category'] as String,
+        title: row['title'] as String,
+        cost: (row['cost'] as num).toDouble(),
+        mileage: row['mileage'] as int,
+        notes: row['notes'] as String?,
+        nextMileage: row['next_mileage'] as int?,
+        nextDate: row['next_date'] == null
+            ? null
+            : DateTime.parse(row['next_date'] as String),
+        mileageAdvanceNotified: row['mileage_advance_notified'] == true,
+        mileageDueNotified: row['mileage_due_notified'] == true,
+      );
+    }).toList();
+  }
+
+  Future<void> deleteMaintenanceEntry(String maintenanceEntryId) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase
+        .from('maintenance_entries_cloud')
+        .delete()
+        .eq('id', maintenanceEntryId)
+        .eq('user_id', user.id);
+  }
+
+  // ---------------------------------------------------------------------------
   // TEST / STATUS
   // ---------------------------------------------------------------------------
 
@@ -361,6 +464,19 @@ class CloudSyncService {
 
     final rows = await _supabase
         .from('expenses_cloud')
+        .select('id')
+        .eq('user_id', user.id);
+
+    return rows.length;
+  }
+
+  Future<int> getCloudMaintenanceEntryCount() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('maintenance_entries_cloud')
         .select('id')
         .eq('user_id', user.id);
 
