@@ -13,80 +13,16 @@ class PremiumPage extends ConsumerStatefulWidget {
 
 class _PremiumPageState extends ConsumerState<PremiumPage> {
   bool _yearlySelected = true;
-  bool _isActivatingPremium = false;
 
-  Future<void> _activatePremiumForTesting() async {
-    if (_isActivatingPremium) {
-      return;
-    }
-
-    final shouldActivate = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          icon: const Icon(Icons.science_outlined),
-          title: const Text('Premium testen?'),
-          content: const Text(
-            'Damit wird MotorLog Premium für dieses Testkonto '
-            'freigeschaltet.\n\n'
-            'Es findet kein echter Kauf und keine Zahlung statt.',
-            textAlign: TextAlign.center,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: const Text('Premium testen'),
-            ),
-          ],
-        );
-      },
+  void _showPurchaseComingSoon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'MotorLog Premium wird vor der Veröffentlichung '
+          'mit dem App Store und Google Play verbunden.',
+        ),
+      ),
     );
-
-    if (shouldActivate != true || !mounted) {
-      return;
-    }
-
-    setState(() {
-      _isActivatingPremium = true;
-    });
-
-    try {
-      await ref.read(premiumProvider.notifier).activatePremiumForTesting();
-
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('MotorLog Premium wurde für dein Testkonto aktiviert.'),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Premium konnte nicht aktiviert werden: $error'),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isActivatingPremium = false;
-        });
-      }
-    }
   }
 
   void _showRestoreComingSoon() {
@@ -171,18 +107,14 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 30),
-
             Text(
               'Premium-Vorteile',
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 14),
-
             const _PremiumFeatureCard(
               icon: Icons.directions_car_outlined,
               title: 'Mehrere Fahrzeuge',
@@ -190,9 +122,7 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   'Verwalte Autos, Motorräder, Camper und weitere Fahrzeuge '
                   'gemeinsam in MotorLog.',
             ),
-
             const SizedBox(height: 12),
-
             const _PremiumFeatureCard(
               icon: Icons.cloud_done_outlined,
               title: 'Cloud-Backup',
@@ -200,9 +130,7 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   'Sichere deine MotorLog-Daten und schütze sie bei einem '
                   'Gerätewechsel oder Verlust.',
             ),
-
             const SizedBox(height: 12),
-
             const _PremiumFeatureCard(
               icon: Icons.sync,
               title: 'Synchronisierung',
@@ -210,9 +138,7 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   'Halte deine MotorLog-Daten auf mehreren Geräten '
                   'automatisch auf dem gleichen Stand.',
             ),
-
             const SizedBox(height: 12),
-
             const _PremiumFeatureCard(
               icon: Icons.bar_chart_outlined,
               title: 'Erweiterte Statistiken',
@@ -220,9 +146,7 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   'Erhalte zusätzliche Auswertungen zu Verbrauch, '
                   'Fahrzeugkosten und Entwicklung.',
             ),
-
             const SizedBox(height: 12),
-
             const _PremiumFeatureCard(
               icon: Icons.description_outlined,
               title: 'Dokumente',
@@ -230,9 +154,7 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   'Verwalte wichtige Fahrzeugunterlagen direkt bei '
                   'deinem Fahrzeug.',
             ),
-
             const SizedBox(height: 12),
-
             const _PremiumFeatureCard(
               icon: Icons.file_download_outlined,
               title: 'Datenexport',
@@ -240,22 +162,16 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   'Exportiere deine Fahrzeugdaten später bequem als '
                   'PDF oder CSV.',
             ),
-
             const SizedBox(height: 32),
-
             Text(
               'Free oder Premium?',
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 14),
-
             const _ComparisonCard(),
-
             const SizedBox(height: 32),
-
             if (isPremium) ...[
               Card(
                 elevation: 0,
@@ -303,9 +219,7 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
-
               const SizedBox(height: 6),
-
               Text(
                 'Die endgültigen Preise werden später direkt aus dem '
                 'App Store bzw. Google Play geladen.',
@@ -313,9 +227,7 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   context,
                 ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
               ),
-
               const SizedBox(height: 14),
-
               _PlanCard(
                 title: 'Jährlich',
                 subtitle: '12 Monate MotorLog Premium',
@@ -327,9 +239,7 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   });
                 },
               ),
-
               const SizedBox(height: 12),
-
               _PlanCard(
                 title: 'Monatlich',
                 subtitle: 'Flexibel monatlich',
@@ -340,54 +250,25 @@ class _PremiumPageState extends ConsumerState<PremiumPage> {
                   });
                 },
               ),
-
               const SizedBox(height: 22),
-
               FilledButton.icon(
-                onPressed: _isActivatingPremium
-                    ? null
-                    : _activatePremiumForTesting,
+                onPressed: _showPurchaseComingSoon,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(58),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
                   ),
                 ),
-                icon: _isActivatingPremium
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.science_outlined),
-                label: Text(
-                  _isActivatingPremium
-                      ? 'Premium wird aktiviert ...'
-                      : 'Premium testweise freischalten',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                icon: const Icon(Icons.workspace_premium_outlined),
+                label: const Text(
+                  'Premium abonnieren',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
-
               const SizedBox(height: 14),
-
               TextButton(
                 onPressed: _showRestoreComingSoon,
                 child: const Text('Käufe wiederherstellen'),
-              ),
-
-              const SizedBox(height: 8),
-
-              Text(
-                'Testmodus: Es findet aktuell kein echter Kauf statt. '
-                'Vor der Veröffentlichung wird diese Funktion durch '
-                'die Abonnements des App Store und Google Play ersetzt.',
-                textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
               ),
             ],
           ],
