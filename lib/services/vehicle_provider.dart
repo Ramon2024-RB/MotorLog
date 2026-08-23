@@ -153,6 +153,33 @@ class VehicleNotifier extends AsyncNotifier<List<Vehicle>> {
   }
 
   // ---------------------------------------------------------------------------
+  // ALLE LOKALEN FAHRZEUGE IN DIE CLOUD SICHERN
+  // ---------------------------------------------------------------------------
+
+  Future<void> uploadAllVehiclesToCloud() async {
+    final vehicles = await _database.getVehicles();
+
+    debugPrint(
+      '☁️ MotorLog Cloud: Backup von ${vehicles.length} Fahrzeug(en) '
+      'wird gestartet.',
+    );
+
+    if (vehicles.isEmpty) {
+      debugPrint(
+        'ℹ️ MotorLog Cloud: Keine lokalen Fahrzeuge zum Sichern vorhanden.',
+      );
+      return;
+    }
+
+    await _cloudSyncService.uploadVehicles(vehicles);
+
+    debugPrint(
+      '✅ MotorLog Cloud: ${vehicles.length} Fahrzeug(e) '
+      'erfolgreich gesichert.',
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // FAHRZEUGE AUS DER CLOUD WIEDERHERSTELLEN
   // ---------------------------------------------------------------------------
 

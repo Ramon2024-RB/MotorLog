@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/expense.dart';
 import '../models/fuel_entry.dart';
 import '../models/vehicle.dart';
 
@@ -239,6 +240,91 @@ class CloudSyncService {
   }
 
   // ---------------------------------------------------------------------------
+  // KOSTEN
+  // ---------------------------------------------------------------------------
+
+  Future<void> uploadExpense(Expense expense) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase.from('expenses_cloud').upsert({
+      'id': expense.id,
+      'user_id': user.id,
+      'vehicle_id': expense.vehicleId,
+      'date': expense.date.toIso8601String(),
+      'category': expense.category,
+      'amount': expense.amount,
+      'title': expense.title,
+      'mileage': expense.mileage,
+      'notes': expense.notes,
+    });
+  }
+
+  Future<void> uploadExpenses(List<Expense> expenses) async {
+    await _requirePremium();
+
+    if (expenses.isEmpty) {
+      return;
+    }
+
+    final user = _currentUser!;
+
+    final rows = expenses.map((expense) {
+      return {
+        'id': expense.id,
+        'user_id': user.id,
+        'vehicle_id': expense.vehicleId,
+        'date': expense.date.toIso8601String(),
+        'category': expense.category,
+        'amount': expense.amount,
+        'title': expense.title,
+        'mileage': expense.mileage,
+        'notes': expense.notes,
+      };
+    }).toList();
+
+    await _supabase.from('expenses_cloud').upsert(rows);
+  }
+
+  Future<List<Expense>> downloadExpenses() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('expenses_cloud')
+        .select()
+        .eq('user_id', user.id)
+        .order('date');
+
+    return rows.map<Expense>((row) {
+      return Expense(
+        id: row['id'] as String,
+        vehicleId: row['vehicle_id'] as String,
+        date: DateTime.parse(row['date'] as String),
+        category: row['category'] as String,
+        amount: (row['amount'] as num).toDouble(),
+        title: row['title'] as String,
+        mileage: row['mileage'] as int?,
+        notes: row['notes'] as String?,
+      );
+    }).toList();
+  }
+
+  Future<void> deleteExpense(String expenseId) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase
+        .from('expenses_cloud')
+        .delete()
+        .eq('id', expenseId)
+        .eq('user_id', user.id);
+  }
+
+  // ---------------------------------------------------------------------------
   // TEST / STATUS
   // ---------------------------------------------------------------------------
 
@@ -262,6 +348,19 @@ class CloudSyncService {
 
     final rows = await _supabase
         .from('fuel_entries_cloud')
+        .select('id')
+        .eq('user_id', user.id);
+
+    return rows.length;
+  }
+
+  Future<int> getCloudExpenseCount() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('expenses_cloud')
         .select('id')
         .eq('user_id', user.id);
 
