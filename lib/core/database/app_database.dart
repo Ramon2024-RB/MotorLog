@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/expense.dart';
 import '../../models/fuel_entry.dart';
@@ -14,23 +17,87 @@ class AppDatabase {
 
   static final AppDatabase instance = AppDatabase._();
 
-  static const String _databaseName = 'motorlog.db';
+  static const String _legacyDatabaseName = 'motorlog.db';
+
+  // Die bisherige motorlog.db gehört diesem bestehenden Test-/Premiumkonto.
+  // Diese UID wird ausschließlich für die einmalige Migration verwendet.
+  static const String _legacyOwnerUserId =
+      'edd8f72d-40ab-47cd-aaea-e540fb49eeaa';
+
   static const int _databaseVersion = 12;
 
   Database? _database;
+  String? _activeUserId;
 
-  Future<Database> get database async {
-    if (_database != null) {
-      return _database!;
+  // ---------------------------------------------------------------------------
+  // BENUTZER-DATENBANK
+  // ---------------------------------------------------------------------------
+
+  String _databaseNameForUser(String userId) {
+    return 'motorlog_$userId.db';
+  }
+
+  String? get activeUserId => _activeUserId;
+
+  Future<void> initializeForCurrentUser() async {
+    final user = Supabase.instance.client.auth.currentUser;
+
+    if (user == null) {
+      await close();
+      return;
     }
 
-    _database = await _openDatabase();
+    await switchToUser(user.id);
+  }
+
+  Future<void> switchToUser(String userId) async {
+    if (_activeUserId == userId && _database != null) {
+      return;
+    }
+
+    await close();
+
+    await _migrateLegacyDatabaseIfNeeded(userId);
+
+    _activeUserId = userId;
+    _database = await _openDatabaseForUser(userId);
+  }
+
+  Future<void> clearActiveUser() async {
+    await close();
+  }
+
+  Future<void> close() async {
+    final database = _database;
+
+    _database = null;
+    _activeUserId = null;
+
+    if (database != null && database.isOpen) {
+      await database.close();
+    }
+  }
+
+  Future<Database> get database async {
+    final currentUser = Supabase.instance.client.auth.currentUser;
+
+    if (currentUser == null) {
+      throw StateError(
+        'Es ist kein MotorLog-Benutzer angemeldet. '
+        'Die lokale Datenbank kann nicht geöffnet werden.',
+      );
+    }
+
+    if (_database == null || _activeUserId != currentUser.id) {
+      await switchToUser(currentUser.id);
+    }
+
     return _database!;
   }
 
-  Future<Database> _openDatabase() async {
+  Future<Database> _openDatabaseForUser(String userId) async {
     final databasePath = await getDatabasesPath();
-    final path = join(databasePath, _databaseName);
+    final path = join(databasePath, _databaseNameForUser(userId));
 
     return openDatabase(
       path,
@@ -42,6 +109,43 @@ class AppDatabase {
       },
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // EINMALIGE MIGRATION DER BISHERIGEN motorlog.db
+  // ---------------------------------------------------------------------------
+
+  Future<void> _migrateLegacyDatabaseIfNeeded(String userId) async {
+    if (userId != _legacyOwnerUserId) {
+      return;
+    }
+
+    final databasePath = await getDatabasesPath();
+
+    final legacyPath = join(databasePath, _legacyDatabaseName);
+    final userDatabasePath = join(databasePath, _databaseNameForUser(userId));
+
+    final legacyDatabase = File(legacyPath);
+    final userDatabase = File(userDatabasePath);
+
+    // Keine alte Datenbank vorhanden -> nichts zu migrieren.
+    if (!await legacyDatabase.exists()) {
+      return;
+    }
+
+    // Die benutzerspezifische Datenbank existiert bereits.
+    // In diesem Fall darf die Migration nicht erneut ausgeführt werden.
+    if (await userDatabase.exists()) {
+      return;
+    }
+
+    // Die alte Datenbank wird bewusst KOPIERT und nicht verschoben.
+    // motorlog.db bleibt dadurch als zusätzliche Sicherheitskopie bestehen.
+    await legacyDatabase.copy(userDatabasePath);
+  }
+
+  // ---------------------------------------------------------------------------
+  // DATENBANK ERSTELLEN
+  // ---------------------------------------------------------------------------
 
   Future<void> _createDatabase(Database db, int version) async {
     await db.execute('''
@@ -185,6 +289,10 @@ class AppDatabase {
     ''');
   }
 
+  // ---------------------------------------------------------------------------
+  // DATENBANK-UPGRADES
+  // ---------------------------------------------------------------------------
+
   Future<void> _upgradeDatabase(
     Database db,
     int oldVersion,
@@ -273,7 +381,7 @@ class AppDatabase {
   }
 
   // ---------------------------------------------------------------------------
-  // Fahrzeuge
+  // FAHRZEUGE
   // ---------------------------------------------------------------------------
 
   Future<List<Vehicle>> getVehicles() async {
@@ -327,7 +435,7 @@ class AppDatabase {
   }
 
   // ---------------------------------------------------------------------------
-  // Tankvorgänge
+  // TANKVORGÄNGE
   // ---------------------------------------------------------------------------
 
   Future<List<FuelEntry>> getFuelEntries({String? vehicleId}) async {
@@ -371,7 +479,7 @@ class AppDatabase {
   }
 
   // ---------------------------------------------------------------------------
-  // Kosten
+  // KOSTEN
   // ---------------------------------------------------------------------------
 
   Future<List<Expense>> getExpenses({String? vehicleId}) async {
@@ -415,7 +523,7 @@ class AppDatabase {
   }
 
   // ---------------------------------------------------------------------------
-  // Wartungen
+  // WARTUNGEN
   // ---------------------------------------------------------------------------
 
   Future<List<MaintenanceEntry>> getMaintenanceEntries({
@@ -490,7 +598,7 @@ class AppDatabase {
   }
 
   // ---------------------------------------------------------------------------
-  // Reifen
+  // REIFEN
   // ---------------------------------------------------------------------------
 
   Future<List<TireSet>> getTireSets({String? vehicleId}) async {
@@ -557,7 +665,7 @@ class AppDatabase {
   }
 
   // ---------------------------------------------------------------------------
-  // Reifenwechsel-Historie
+  // REIFENWECHSEL-HISTORIE
   // ---------------------------------------------------------------------------
 
   Future<List<TireMountHistory>> getTireMountHistory({
@@ -653,7 +761,7 @@ class AppDatabase {
   }
 
   // ---------------------------------------------------------------------------
-  // Dokumente
+  // DOKUMENTE
   // ---------------------------------------------------------------------------
 
   Future<List<VehicleDocument>> getDocuments({String? vehicleId}) async {

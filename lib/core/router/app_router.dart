@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../database/app_database.dart';
 import '../../screens/app_shell.dart';
 import '../../screens/auth/login_page.dart';
 import '../../screens/auth/register_page.dart';
@@ -27,16 +28,7 @@ class AuthStateNotifier extends ChangeNotifier {
     _subscription = Supabase.instance.client.auth.onAuthStateChange.listen((
       data,
     ) {
-      if (data.event == AuthChangeEvent.passwordRecovery) {
-        _isPasswordRecovery = true;
-      }
-
-      if (data.event == AuthChangeEvent.signedOut ||
-          data.event == AuthChangeEvent.userUpdated) {
-        _isPasswordRecovery = false;
-      }
-
-      notifyListeners();
+      unawaited(_handleAuthStateChange(data));
     });
   }
 
@@ -45,6 +37,27 @@ class AuthStateNotifier extends ChangeNotifier {
   bool _isPasswordRecovery = false;
 
   bool get isPasswordRecovery => _isPasswordRecovery;
+
+  Future<void> _handleAuthStateChange(AuthState data) async {
+    if (data.event == AuthChangeEvent.passwordRecovery) {
+      _isPasswordRecovery = true;
+    }
+
+    if (data.event == AuthChangeEvent.signedOut ||
+        data.event == AuthChangeEvent.userUpdated) {
+      _isPasswordRecovery = false;
+    }
+
+    final user = data.session?.user;
+
+    if (user == null) {
+      await AppDatabase.instance.clearActiveUser();
+    } else {
+      await AppDatabase.instance.switchToUser(user.id);
+    }
+
+    notifyListeners();
+  }
 
   void finishPasswordRecovery() {
     if (!_isPasswordRecovery) {

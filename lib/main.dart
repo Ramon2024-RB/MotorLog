@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/database/app_database.dart';
 import 'core/router/app_router.dart';
 import 'services/notification_service.dart';
 
@@ -13,10 +16,57 @@ Future<void> main() async {
     publishableKey: 'sb_publishable__8OlcDRdF1t-u2H_l-UskQ_bOkcMw3M',
   );
 
+  await AppDatabase.instance.initializeForCurrentUser();
+
   await NotificationService.instance.initialize();
   await NotificationService.instance.requestPermissions();
 
-  runApp(const ProviderScope(child: MotorLogApp()));
+  runApp(const MotorLogRoot());
+}
+
+class MotorLogRoot extends StatefulWidget {
+  const MotorLogRoot({super.key});
+
+  @override
+  State<MotorLogRoot> createState() => _MotorLogRootState();
+}
+
+class _MotorLogRootState extends State<MotorLogRoot> {
+  late final StreamSubscription<AuthState> _authSubscription;
+
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _userId = Supabase.instance.client.auth.currentUser?.id;
+
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) {
+      final newUserId = data.session?.user.id;
+
+      if (newUserId == _userId) {
+        return;
+      }
+
+      setState(() {
+        _userId = newUserId;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ProviderScope(key: ValueKey(_userId), child: const MotorLogApp());
+  }
 }
 
 class MotorLogApp extends StatelessWidget {
