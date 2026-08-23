@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../screens/app_shell.dart';
 import '../../screens/auth/login_page.dart';
 import '../../screens/auth/register_page.dart';
+import '../../screens/auth/reset_password_page.dart';
 import '../../screens/dashboard/dashboard_page.dart';
 import '../../screens/documents/document_detail_page.dart';
 import '../../screens/documents/documents_page.dart';
@@ -52,14 +53,16 @@ final GoRouter appRouter = GoRouter(
 
     final isLoginPage = state.matchedLocation == '/login';
     final isRegisterPage = state.matchedLocation == '/register';
+    final isResetPasswordPage = state.matchedLocation == '/reset-password';
 
-    final isAuthPage = isLoginPage || isRegisterPage;
+    final isPublicAuthPage =
+        isLoginPage || isRegisterPage || isResetPasswordPage;
 
-    if (!isLoggedIn && !isAuthPage) {
+    if (!isLoggedIn && !isPublicAuthPage) {
       return '/login';
     }
 
-    if (isLoggedIn && isAuthPage) {
+    if (isLoggedIn && (isLoginPage || isRegisterPage)) {
       return '/';
     }
 
@@ -89,6 +92,16 @@ final GoRouter appRouter = GoRouter(
     ),
 
     // -------------------------------------------------------------------------
+    // PASSWORT ZURÜCKSETZEN
+    // -------------------------------------------------------------------------
+    GoRoute(
+      path: '/reset-password',
+      builder: (context, state) {
+        return const ResetPasswordPage();
+      },
+    ),
+
+    // -------------------------------------------------------------------------
     // EINSTELLUNGEN
     // -------------------------------------------------------------------------
     GoRoute(
@@ -97,11 +110,6 @@ final GoRouter appRouter = GoRouter(
         return const SettingsPage();
       },
       routes: [
-        // ---------------------------------------------------------------------
-        // CLOUD & SYNCHRONISIERUNG
-        // /settings/cloud
-        // ---------------------------------------------------------------------
-
         GoRoute(
           path: 'cloud',
           builder: (context, state) {
@@ -141,9 +149,9 @@ final GoRouter appRouter = GoRouter(
                 return const DashboardPage();
               },
               routes: [
-                // -----------------------------------------------------------------
+                // -------------------------------------------------------------
                 // WARTUNGEN
-                // -----------------------------------------------------------------
+                // -------------------------------------------------------------
 
                 GoRoute(
                   path: 'maintenance/:vehicleId',
@@ -154,9 +162,9 @@ final GoRouter appRouter = GoRouter(
                   },
                 ),
 
-                // -----------------------------------------------------------------
+                // -------------------------------------------------------------
                 // REIFEN
-                // -----------------------------------------------------------------
+                // -------------------------------------------------------------
                 GoRoute(
                   path: 'tires/:vehicleId',
                   builder: (context, state) {
@@ -166,9 +174,9 @@ final GoRouter appRouter = GoRouter(
                   },
                 ),
 
-                // -----------------------------------------------------------------
+                // -------------------------------------------------------------
                 // DOKUMENTE
-                // -----------------------------------------------------------------
+                // -------------------------------------------------------------
                 GoRoute(
                   path: 'documents/:vehicleId',
                   builder: (context, state) {
@@ -188,9 +196,9 @@ final GoRouter appRouter = GoRouter(
                   ],
                 ),
 
-                // -----------------------------------------------------------------
+                // -------------------------------------------------------------
                 // STATISTIKEN
-                // -----------------------------------------------------------------
+                // -------------------------------------------------------------
                 GoRoute(
                   path: 'statistics/:vehicleId',
                   builder: (context, state) {
@@ -247,10 +255,6 @@ final GoRouter appRouter = GoRouter(
                 return const VehiclesPage();
               },
               routes: [
-                // -------------------------------------------------------------
-                // FAHRZEUGDETAILS
-                // -------------------------------------------------------------
-
                 GoRoute(
                   path: ':vehicleId',
                   builder: (context, state) {

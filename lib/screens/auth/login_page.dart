@@ -63,6 +63,111 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _resetPassword() async {
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty) {
+      _showError('Bitte gib zuerst deine E-Mail-Adresse ein.');
+      return;
+    }
+
+    if (!email.contains('@') || !email.contains('.')) {
+      _showError('Bitte gib eine gültige E-Mail-Adresse ein.');
+      return;
+    }
+
+    final shouldReset = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(Icons.lock_reset_outlined),
+          title: const Text('Passwort zurücksetzen'),
+          content: Text(
+            'MotorLog sendet dir eine E-Mail zum Zurücksetzen '
+            'deines Passworts an:\n\n$email',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('E-Mail senden'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldReset != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'motorlog://reset-password/',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            icon: const Icon(Icons.mark_email_read_outlined),
+            title: const Text('E-Mail wurde gesendet'),
+            content: Text(
+              'Wir haben eine E-Mail zum Zurücksetzen des Passworts '
+              'an $email gesendet.\n\n'
+              'Öffne die E-Mail und folge dem Link, um ein neues '
+              'Passwort festzulegen.',
+              textAlign: TextAlign.center,
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+    } on AuthException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError(error.message);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError('Die Passwort-E-Mail konnte nicht gesendet werden: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _signInWithGoogle() async {
     setState(() {
       _isLoading = true;
@@ -157,18 +262,14 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 22),
-
                     Text(
                       'MotorLog',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineLarge
                           ?.copyWith(fontWeight: FontWeight.bold),
                     ),
-
                     const SizedBox(height: 8),
-
                     Text(
                       'Deine Fahrzeuge. Alles im Blick.',
                       textAlign: TextAlign.center,
@@ -176,9 +277,7 @@ class _LoginPageState extends State<LoginPage> {
                         color: colors.onSurfaceVariant,
                       ),
                     ),
-
                     const SizedBox(height: 38),
-
                     _SocialLoginButton(
                       icon: const Text(
                         '',
@@ -190,17 +289,13 @@ class _LoginPageState extends State<LoginPage> {
                       label: 'Mit Apple anmelden',
                       onPressed: _isLoading ? null : _signInWithApple,
                     ),
-
                     const SizedBox(height: 12),
-
                     _SocialLoginButton(
                       icon: const _GoogleIcon(),
                       label: 'Mit Google anmelden',
                       onPressed: _isLoading ? null : _signInWithGoogle,
                     ),
-
                     const SizedBox(height: 28),
-
                     Row(
                       children: [
                         const Expanded(child: Divider()),
@@ -215,9 +310,7 @@ class _LoginPageState extends State<LoginPage> {
                         const Expanded(child: Divider()),
                       ],
                     ),
-
                     const SizedBox(height: 28),
-
                     TextFormField(
                       controller: _emailController,
                       enabled: !_isLoading,
@@ -252,9 +345,7 @@ class _LoginPageState extends State<LoginPage> {
                         return null;
                       },
                     ),
-
                     const SizedBox(height: 14),
-
                     TextFormField(
                       controller: _passwordController,
                       enabled: !_isLoading,
@@ -302,29 +393,15 @@ class _LoginPageState extends State<LoginPage> {
                         return null;
                       },
                     ),
-
                     const SizedBox(height: 10),
-
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Passwort zurücksetzen bauen wir als Nächstes ein.',
-                                    ),
-                                  ),
-                                );
-                              },
+                        onPressed: _isLoading ? null : _resetPassword,
                         child: const Text('Passwort vergessen?'),
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
                     FilledButton(
                       onPressed: _isLoading ? null : _signInWithEmail,
                       style: FilledButton.styleFrom(
@@ -347,9 +424,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                     ),
-
                     const SizedBox(height: 22),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -364,9 +439,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 8),
-
                     Text(
                       'Mit der Anmeldung kannst du später Cloud-Backup, '
                       'Synchronisierung und weitere MotorLog-Funktionen nutzen.',
