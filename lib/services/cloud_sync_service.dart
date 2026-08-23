@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense.dart';
 import '../models/fuel_entry.dart';
 import '../models/maintenance_entry.dart';
+import '../models/tire_mount_history.dart';
+import '../models/tire_set.dart';
 import '../models/vehicle.dart';
 
 class CloudSyncService {
@@ -428,6 +430,233 @@ class CloudSyncService {
   }
 
   // ---------------------------------------------------------------------------
+  // REIFENSÄTZE
+  // ---------------------------------------------------------------------------
+
+  Future<void> uploadTireSet(TireSet tireSet) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase.from('tire_sets_cloud').upsert({
+      'id': tireSet.id,
+      'user_id': user.id,
+      'vehicle_id': tireSet.vehicleId,
+      'name': tireSet.name,
+      'tire_type': tireSet.tireType,
+      'width': tireSet.width,
+      'aspect_ratio': tireSet.aspectRatio,
+      'rim_diameter': tireSet.rimDiameter,
+      'manufacturer': tireSet.manufacturer,
+      'model': tireSet.model,
+      'purchase_date': tireSet.purchaseDate?.toIso8601String(),
+      'purchase_price': tireSet.purchasePrice,
+      'production_year': tireSet.productionYear,
+      'tread_depth': tireSet.treadDepth,
+      'is_mounted': tireSet.isMounted,
+      'mounted_mileage': tireSet.mountedMileage,
+      'mounted_date': tireSet.mountedDate?.toIso8601String(),
+      'total_mileage': tireSet.totalMileage,
+      'notes': tireSet.notes,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> uploadTireSets(List<TireSet> tireSets) async {
+    await _requirePremium();
+
+    if (tireSets.isEmpty) {
+      return;
+    }
+
+    final user = _currentUser!;
+    final updatedAt = DateTime.now().toUtc().toIso8601String();
+
+    final rows = tireSets.map((tireSet) {
+      return {
+        'id': tireSet.id,
+        'user_id': user.id,
+        'vehicle_id': tireSet.vehicleId,
+        'name': tireSet.name,
+        'tire_type': tireSet.tireType,
+        'width': tireSet.width,
+        'aspect_ratio': tireSet.aspectRatio,
+        'rim_diameter': tireSet.rimDiameter,
+        'manufacturer': tireSet.manufacturer,
+        'model': tireSet.model,
+        'purchase_date': tireSet.purchaseDate?.toIso8601String(),
+        'purchase_price': tireSet.purchasePrice,
+        'production_year': tireSet.productionYear,
+        'tread_depth': tireSet.treadDepth,
+        'is_mounted': tireSet.isMounted,
+        'mounted_mileage': tireSet.mountedMileage,
+        'mounted_date': tireSet.mountedDate?.toIso8601String(),
+        'total_mileage': tireSet.totalMileage,
+        'notes': tireSet.notes,
+        'updated_at': updatedAt,
+      };
+    }).toList();
+
+    await _supabase.from('tire_sets_cloud').upsert(rows);
+  }
+
+  Future<List<TireSet>> downloadTireSets() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('tire_sets_cloud')
+        .select()
+        .eq('user_id', user.id)
+        .order('created_at');
+
+    return rows.map<TireSet>((row) {
+      return TireSet(
+        id: row['id'] as String,
+        vehicleId: row['vehicle_id'] as String,
+        name: row['name'] as String,
+        tireType: row['tire_type'] as String,
+        width: row['width'] as int,
+        aspectRatio: row['aspect_ratio'] as int,
+        rimDiameter: row['rim_diameter'] as int,
+        manufacturer: row['manufacturer'] as String?,
+        model: row['model'] as String?,
+        purchaseDate: row['purchase_date'] == null
+            ? null
+            : DateTime.parse(row['purchase_date'] as String),
+        purchasePrice: row['purchase_price'] == null
+            ? null
+            : (row['purchase_price'] as num).toDouble(),
+        productionYear: row['production_year'] as int?,
+        treadDepth: row['tread_depth'] == null
+            ? null
+            : (row['tread_depth'] as num).toDouble(),
+        isMounted: row['is_mounted'] == true,
+        mountedMileage: row['mounted_mileage'] as int?,
+        mountedDate: row['mounted_date'] == null
+            ? null
+            : DateTime.parse(row['mounted_date'] as String),
+        totalMileage: row['total_mileage'] as int? ?? 0,
+        notes: row['notes'] as String?,
+      );
+    }).toList();
+  }
+
+  Future<void> deleteTireSet(String tireSetId) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase
+        .from('tire_sets_cloud')
+        .delete()
+        .eq('id', tireSetId)
+        .eq('user_id', user.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // REIFENWECHSEL-HISTORIE
+  // ---------------------------------------------------------------------------
+
+  Future<void> uploadTireMountHistory(TireMountHistory history) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase.from('tire_mount_history_cloud').upsert({
+      'id': history.id,
+      'user_id': user.id,
+      'vehicle_id': history.vehicleId,
+      'tire_set_id': history.tireSetId,
+      'mounted_date': history.mountedDate.toIso8601String(),
+      'mounted_mileage': history.mountedMileage,
+      'unmounted_date': history.unmountedDate?.toIso8601String(),
+      'unmounted_mileage': history.unmountedMileage,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> uploadTireMountHistories(
+    List<TireMountHistory> histories,
+  ) async {
+    await _requirePremium();
+
+    if (histories.isEmpty) {
+      return;
+    }
+
+    final user = _currentUser!;
+    final updatedAt = DateTime.now().toUtc().toIso8601String();
+
+    final rows = histories.map((history) {
+      return {
+        'id': history.id,
+        'user_id': user.id,
+        'vehicle_id': history.vehicleId,
+        'tire_set_id': history.tireSetId,
+        'mounted_date': history.mountedDate.toIso8601String(),
+        'mounted_mileage': history.mountedMileage,
+        'unmounted_date': history.unmountedDate?.toIso8601String(),
+        'unmounted_mileage': history.unmountedMileage,
+        'updated_at': updatedAt,
+      };
+    }).toList();
+
+    await _supabase.from('tire_mount_history_cloud').upsert(rows);
+  }
+
+  Future<List<TireMountHistory>> downloadTireMountHistories() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('tire_mount_history_cloud')
+        .select()
+        .eq('user_id', user.id)
+        .order('mounted_date');
+
+    return rows.map<TireMountHistory>((row) {
+      return TireMountHistory(
+        id: row['id'] as String,
+        vehicleId: row['vehicle_id'] as String,
+        tireSetId: row['tire_set_id'] as String,
+        mountedDate: DateTime.parse(row['mounted_date'] as String),
+        mountedMileage: row['mounted_mileage'] as int,
+        unmountedDate: row['unmounted_date'] == null
+            ? null
+            : DateTime.parse(row['unmounted_date'] as String),
+        unmountedMileage: row['unmounted_mileage'] as int?,
+      );
+    }).toList();
+  }
+
+  Future<void> deleteTireMountHistoriesForTireSet(String tireSetId) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase
+        .from('tire_mount_history_cloud')
+        .delete()
+        .eq('tire_set_id', tireSetId)
+        .eq('user_id', user.id);
+  }
+
+  Future<void> deleteTireMountHistory(String historyId) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase
+        .from('tire_mount_history_cloud')
+        .delete()
+        .eq('id', historyId)
+        .eq('user_id', user.id);
+  }
+
+  // ---------------------------------------------------------------------------
   // TEST / STATUS
   // ---------------------------------------------------------------------------
 
@@ -477,6 +706,32 @@ class CloudSyncService {
 
     final rows = await _supabase
         .from('maintenance_entries_cloud')
+        .select('id')
+        .eq('user_id', user.id);
+
+    return rows.length;
+  }
+
+  Future<int> getCloudTireSetCount() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('tire_sets_cloud')
+        .select('id')
+        .eq('user_id', user.id);
+
+    return rows.length;
+  }
+
+  Future<int> getCloudTireMountHistoryCount() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('tire_mount_history_cloud')
         .select('id')
         .eq('user_id', user.id);
 

@@ -7,6 +7,7 @@ import '../../services/expense_provider.dart';
 import '../../services/fuel_entry_provider.dart';
 import '../../services/maintenance_provider.dart';
 import '../../services/premium_provider.dart';
+import '../../services/tire_provider.dart';
 import '../../services/vehicle_provider.dart';
 
 class CloudSyncPage extends ConsumerStatefulWidget {
@@ -27,6 +28,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
   int? _cloudFuelEntryCount;
   int? _cloudExpenseCount;
   int? _cloudMaintenanceEntryCount;
+  int? _cloudTireSetCount;
+  int? _cloudTireMountHistoryCount;
 
   String? _cloudStatusError;
 
@@ -59,6 +62,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           _cloudFuelEntryCount = null;
           _cloudExpenseCount = null;
           _cloudMaintenanceEntryCount = null;
+          _cloudTireSetCount = null;
+          _cloudTireMountHistoryCount = null;
           _cloudStatusError = null;
           _isLoadingCloudStatus = false;
         });
@@ -76,6 +81,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
         _cloudSyncService.getCloudFuelEntryCount(),
         _cloudSyncService.getCloudExpenseCount(),
         _cloudSyncService.getCloudMaintenanceEntryCount(),
+        _cloudSyncService.getCloudTireSetCount(),
+        _cloudSyncService.getCloudTireMountHistoryCount(),
       ]);
 
       if (!mounted) {
@@ -87,6 +94,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
         _cloudFuelEntryCount = results[1];
         _cloudExpenseCount = results[2];
         _cloudMaintenanceEntryCount = results[3];
+        _cloudTireSetCount = results[4];
+        _cloudTireMountHistoryCount = results[5];
         _isLoadingCloudStatus = false;
       });
     } catch (error) {
@@ -117,8 +126,9 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           icon: const Icon(Icons.cloud_upload_outlined),
           title: const Text('Lokale Daten sichern?'),
           content: const Text(
-            'Deine lokal gespeicherten Fahrzeuge, Tankvorgänge, Kosten '
-            'und Wartungen werden in der MotorLog Cloud gesichert.\n\n'
+            'Deine lokal gespeicherten Fahrzeuge, Tankvorgänge, Kosten, '
+            'Wartungen, Reifensätze und Reifenwechsel-Historien werden in '
+            'der MotorLog Cloud gesichert.\n\n'
             'Bereits vorhandene Cloud-Einträge mit derselben ID werden '
             'aktualisiert.',
             textAlign: TextAlign.center,
@@ -169,6 +179,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
       await ref
           .read(maintenanceProvider.notifier)
           .uploadAllMaintenanceEntriesToCloud();
+
+      await ref.read(tireProvider.notifier).uploadAllTireDataToCloud();
 
       if (!mounted) {
         return;
@@ -223,8 +235,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           title: const Text('Cloud-Daten wiederherstellen?'),
           content: const Text(
             'Deine in der MotorLog Cloud gespeicherten Fahrzeuge, '
-            'Tankvorgänge, Kosten und Wartungen werden auf dieses Gerät '
-            'übertragen.\n\n'
+            'Tankvorgänge, Kosten, Wartungen, Reifensätze und '
+            'Reifenwechsel-Historien werden auf dieses Gerät übertragen.\n\n'
             'Einträge mit derselben ID werden aktualisiert. Andere lokale '
             'Daten werden dabei nicht gelöscht.',
             textAlign: TextAlign.center,
@@ -258,8 +270,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
     try {
       // Fahrzeuge zuerst wiederherstellen.
       //
-      // Tankvorgänge, Kosten und Wartungen gehören jeweils
-      // über vehicleId zu einem Fahrzeug.
+      // Die übrigen Daten gehören jeweils über vehicleId
+      // zu einem Fahrzeug.
       final restoredVehicleCount = await ref
           .read(vehicleProvider.notifier)
           .restoreVehiclesFromCloud();
@@ -276,6 +288,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
           .read(maintenanceProvider.notifier)
           .restoreMaintenanceEntriesFromCloud();
 
+      final restoredTireSetCount = await ref
+          .read(tireProvider.notifier)
+          .restoreTireDataFromCloud();
+
       if (!mounted) {
         return;
       }
@@ -291,9 +307,11 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
             '$restoredVehicleCount ${_vehicleLabel(restoredVehicleCount)}, '
             '$restoredFuelEntryCount '
             '${_fuelEntryLabel(restoredFuelEntryCount)}, '
-            '$restoredExpenseCount ${_expenseLabel(restoredExpenseCount)} '
-            'und $restoredMaintenanceCount '
-            '${_maintenanceLabel(restoredMaintenanceCount)}.',
+            '$restoredExpenseCount ${_expenseLabel(restoredExpenseCount)}, '
+            '$restoredMaintenanceCount '
+            '${_maintenanceLabel(restoredMaintenanceCount)} und '
+            '$restoredTireSetCount '
+            '${_tireSetLabel(restoredTireSetCount)}.',
           ),
         ),
       );
@@ -328,6 +346,10 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
 
   String _maintenanceLabel(int count) {
     return count == 1 ? 'Wartung' : 'Wartungen';
+  }
+
+  String _tireSetLabel(int count) {
+    return count == 1 ? 'Reifensatz' : 'Reifensätze';
   }
 
   @override
@@ -399,18 +421,14 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 28),
-
             Text(
               'Cloud-Status',
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 12),
-
             premiumAsync.when(
               loading: () {
                 return const _StatusCard(
@@ -445,23 +463,21 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                   cloudFuelEntryCount: _cloudFuelEntryCount,
                   cloudExpenseCount: _cloudExpenseCount,
                   cloudMaintenanceEntryCount: _cloudMaintenanceEntryCount,
+                  cloudTireSetCount: _cloudTireSetCount,
+                  cloudTireMountHistoryCount: _cloudTireMountHistoryCount,
                   error: _cloudStatusError,
                   onRetry: _loadCloudStatus,
                 );
               },
             ),
-
             const SizedBox(height: 28),
-
             Text(
               'Backup',
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 12),
-
             premiumAsync.when(
               loading: () {
                 return const _CloudActionUnavailableCard(
@@ -514,8 +530,9 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                                   ),
                                   SizedBox(height: 3),
                                   Text(
-                                    'Sichere Fahrzeuge, Tankvorgänge, Kosten '
-                                    'und Wartungen dieses Geräts in der Cloud.',
+                                    'Sichere Fahrzeuge, Tankvorgänge, Kosten, '
+                                    'Wartungen und Reifendaten dieses Geräts '
+                                    'in der Cloud.',
                                   ),
                                 ],
                               ),
@@ -551,18 +568,14 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                 );
               },
             ),
-
             const SizedBox(height: 28),
-
             Text(
               'Wiederherstellung',
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 12),
-
             premiumAsync.when(
               loading: () {
                 return const _CloudActionUnavailableCard(
@@ -618,8 +631,8 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                                   SizedBox(height: 3),
                                   Text(
                                     'Lade deine Fahrzeuge, Tankvorgänge, '
-                                    'Kosten und Wartungen aus der '
-                                    'MotorLog Cloud.',
+                                    'Kosten, Wartungen und Reifendaten aus '
+                                    'der MotorLog Cloud.',
                                   ),
                                 ],
                               ),
@@ -655,9 +668,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
                 );
               },
             ),
-
             const SizedBox(height: 20),
-
             Card(
               elevation: 0,
               margin: EdgeInsets.zero,
@@ -697,6 +708,8 @@ class _PremiumStatusCard extends StatelessWidget {
     required this.cloudFuelEntryCount,
     required this.cloudExpenseCount,
     required this.cloudMaintenanceEntryCount,
+    required this.cloudTireSetCount,
+    required this.cloudTireMountHistoryCount,
     required this.error,
     required this.onRetry,
   });
@@ -706,6 +719,8 @@ class _PremiumStatusCard extends StatelessWidget {
   final int? cloudFuelEntryCount;
   final int? cloudExpenseCount;
   final int? cloudMaintenanceEntryCount;
+  final int? cloudTireSetCount;
+  final int? cloudTireMountHistoryCount;
   final String? error;
   final VoidCallback onRetry;
 
@@ -801,6 +816,20 @@ class _PremiumStatusCard extends StatelessWidget {
                     text: cloudMaintenanceEntryCount == 1
                         ? '1 Wartung in der Cloud'
                         : '${cloudMaintenanceEntryCount ?? 0} Wartungen in der Cloud',
+                  ),
+                  const SizedBox(height: 14),
+                  _CloudCountRow(
+                    icon: Icons.tire_repair_outlined,
+                    text: cloudTireSetCount == 1
+                        ? '1 Reifensatz in der Cloud'
+                        : '${cloudTireSetCount ?? 0} Reifensätze in der Cloud',
+                  ),
+                  const SizedBox(height: 14),
+                  _CloudCountRow(
+                    icon: Icons.history_outlined,
+                    text: cloudTireMountHistoryCount == 1
+                        ? '1 Reifenwechsel in der Cloud'
+                        : '${cloudTireMountHistoryCount ?? 0} Reifenwechsel in der Cloud',
                   ),
                 ],
               ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -5,6 +6,8 @@ import '../core/database/app_database.dart';
 import '../models/tire_mount_history.dart';
 import '../models/tire_set.dart';
 import '../models/vehicle.dart';
+import 'cloud_sync_service.dart';
+import 'premium_provider.dart';
 import 'vehicle_provider.dart';
 
 final tireProvider = AsyncNotifierProvider<TireNotifier, List<TireSet>>(
@@ -13,6 +16,7 @@ final tireProvider = AsyncNotifierProvider<TireNotifier, List<TireSet>>(
 
 class TireNotifier extends AsyncNotifier<List<TireSet>> {
   final AppDatabase _database = AppDatabase.instance;
+  final CloudSyncService _cloudSyncService = CloudSyncService.instance;
 
   @override
   Future<List<TireSet>> build() async {
@@ -27,6 +31,10 @@ class TireNotifier extends AsyncNotifier<List<TireSet>> {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // REIFENSATZ HINZUFÜGEN
+  // ---------------------------------------------------------------------------
+
   Future<void> addTireSet(TireSet tireSet) async {
     await _database.insertTireSet(tireSet);
 
@@ -40,7 +48,13 @@ class TireNotifier extends AsyncNotifier<List<TireSet>> {
     }
 
     await reload();
+
+    await _trySyncAllTireData(reason: 'neuer Reifensatz "${tireSet.name}"');
   }
+
+  // ---------------------------------------------------------------------------
+  // REIFENSATZ BEARBEITEN
+  // ---------------------------------------------------------------------------
 
   Future<void> updateTireSet(TireSet tireSet) async {
     final existingTireSets = await _database.getTireSets(
@@ -82,7 +96,15 @@ class TireNotifier extends AsyncNotifier<List<TireSet>> {
     }
 
     await reload();
+
+    await _trySyncAllTireData(
+      reason: 'bearbeiteter Reifensatz "${tireSet.name}"',
+    );
   }
+
+  // ---------------------------------------------------------------------------
+  // REIFENSATZ LÖSCHEN
+  // ---------------------------------------------------------------------------
 
   Future<void> deleteTireSet(String id) async {
     final allTireSets = await _database.getTireSets();
@@ -103,7 +125,19 @@ class TireNotifier extends AsyncNotifier<List<TireSet>> {
     await _database.deleteTireSet(id);
 
     await reload();
+
+    await _tryDeleteCloudTireSet(id);
+
+    await _trySyncAllTireData(
+      reason: tireSet == null
+          ? 'gelöschter Reifensatz'
+          : 'gelöschter Reifensatz "${tireSet.name}"',
+    );
   }
+
+  // ---------------------------------------------------------------------------
+  // REIFENSATZ MONTIEREN
+  // ---------------------------------------------------------------------------
 
   Future<void> setMountedTireSet({
     required String vehicleId,
@@ -138,7 +172,13 @@ class TireNotifier extends AsyncNotifier<List<TireSet>> {
     );
 
     await reload();
+
+    await _trySyncAllTireData(reason: 'Montage von "${tireSet.name}"');
   }
+
+  // ---------------------------------------------------------------------------
+  // REIFENWECHSEL-HISTORIE
+  // ---------------------------------------------------------------------------
 
   Future<List<TireMountHistory>> getTireMountHistory({
     required String tireSetId,
@@ -169,6 +209,113 @@ class TireNotifier extends AsyncNotifier<List<TireSet>> {
 
     return completedDistance + activeDistance;
   }
+
+  // ---------------------------------------------------------------------------
+  // GESAMT-BACKUP REIFEN
+  // ---------------------------------------------------------------------------
+
+  Future<void> uploadAllTireDataToCloud() async {
+    final isPremium = await ref.read(premiumProvider.future);
+
+    if (!isPremium) {
+      return;
+    }
+
+    final tireSets = await _database.getTireSets();
+    final histories = await _database.getTireMountHistory();
+
+    debugPrint(
+      '☁️ MotorLog Cloud: Backup von ${tireSets.length} '
+      'Reifensatz/Reifensätzen wird gestartet.',
+    );
+
+    if (tireSets.isNotEmpty) {
+      await _cloudSyncService.uploadTireSets(tireSets);
+    }
+
+    debugPrint(
+      '✅ MotorLog Cloud: ${tireSets.length} Reifensatz/Reifensätze '
+      'erfolgreich gesichert.',
+    );
+
+    debugPrint(
+      '☁️ MotorLog Cloud: Backup von ${histories.length} '
+      'Reifenwechsel-Historieneintrag/Historieneinträgen wird gestartet.',
+    );
+
+    if (histories.isNotEmpty) {
+      await _cloudSyncService.uploadTireMountHistories(histories);
+    }
+
+    debugPrint(
+      '✅ MotorLog Cloud: ${histories.length} '
+      'Reifenwechsel-Historieneintrag/Historieneinträge '
+      'erfolgreich gesichert.',
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CLOUD-WIEDERHERSTELLUNG REIFEN
+  // ---------------------------------------------------------------------------
+
+  Future<int> restoreTireDataFromCloud() async {
+    final isPremium = await ref.read(premiumProvider.future);
+
+    if (!isPremium) {
+      throw StateError(
+        'Cloud-Wiederherstellung ist nur mit MotorLog Premium verfügbar.',
+      );
+    }
+
+    debugPrint('☁️ MotorLog Cloud: Reifensatz-Download wird gestartet.');
+
+    final cloudTireSets = await _cloudSyncService.downloadTireSets();
+
+    debugPrint(
+      '☁️ MotorLog Cloud: ${cloudTireSets.length} '
+      'Reifensatz/Reifensätze aus der Cloud geladen.',
+    );
+
+    for (final tireSet in cloudTireSets) {
+      await _database.insertTireSet(tireSet);
+
+      debugPrint(
+        '📱 MotorLog lokal: Reifensatz "${tireSet.name}" '
+        'wurde gespeichert/wiederhergestellt.',
+      );
+    }
+
+    debugPrint(
+      '☁️ MotorLog Cloud: Reifenwechsel-Historie wird heruntergeladen.',
+    );
+
+    final cloudHistories = await _cloudSyncService.downloadTireMountHistories();
+
+    debugPrint(
+      '☁️ MotorLog Cloud: ${cloudHistories.length} '
+      'Reifenwechsel-Historieneintrag/Historieneinträge '
+      'aus der Cloud geladen.',
+    );
+
+    for (final history in cloudHistories) {
+      await _database.insertTireMountHistory(history);
+    }
+
+    state = AsyncData(await _database.getTireSets());
+
+    debugPrint(
+      '✅ MotorLog Cloud: ${cloudTireSets.length} Reifensatz/Reifensätze '
+      'und ${cloudHistories.length} '
+      'Reifenwechsel-Historieneintrag/Historieneinträge '
+      'erfolgreich lokal wiederhergestellt.',
+    );
+
+    return cloudTireSets.length;
+  }
+
+  // ---------------------------------------------------------------------------
+  // INTERNE MONTAGELOGIK
+  // ---------------------------------------------------------------------------
 
   Future<void> _mountTireSet({
     required String vehicleId,
@@ -300,6 +447,91 @@ class TireNotifier extends AsyncNotifier<List<TireSet>> {
 
     await _database.updateTireMountHistory(finishedHistory);
   }
+
+  // ---------------------------------------------------------------------------
+  // CLOUD-HILFSMETHODEN
+  // ---------------------------------------------------------------------------
+
+  Future<void> _trySyncAllTireData({required String reason}) async {
+    try {
+      final isPremium = await ref.read(premiumProvider.future);
+
+      debugPrint('☁️ MotorLog Cloud: Premium-Status bei Reifen: $isPremium');
+
+      if (!isPremium) {
+        return;
+      }
+
+      final tireSets = await _database.getTireSets();
+      final histories = await _database.getTireMountHistory();
+
+      debugPrint(
+        '☁️ MotorLog Cloud: Reifendaten-Synchronisierung '
+        '($reason) wird gestartet.',
+      );
+
+      if (tireSets.isNotEmpty) {
+        await _cloudSyncService.uploadTireSets(tireSets);
+      }
+
+      if (histories.isNotEmpty) {
+        await _cloudSyncService.uploadTireMountHistories(histories);
+      }
+
+      debugPrint(
+        '✅ MotorLog Cloud: Reifendaten erfolgreich synchronisiert '
+        '(${tireSets.length} Reifensatz/Reifensätze, '
+        '${histories.length} Historieneintrag/Historieneinträge).',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '❌ MotorLog Cloud: Reifendaten konnten nicht '
+        'synchronisiert werden.',
+      );
+      debugPrint('❌ Fehler: $error');
+      debugPrint('❌ StackTrace: $stackTrace');
+    }
+  }
+
+  Future<void> _tryDeleteCloudTireSet(String tireSetId) async {
+    try {
+      final isPremium = await ref.read(premiumProvider.future);
+
+      debugPrint(
+        '☁️ MotorLog Cloud: Premium-Status beim Löschen '
+        'des Reifensatzes: $isPremium',
+      );
+
+      if (!isPremium) {
+        return;
+      }
+
+      debugPrint(
+        '☁️ MotorLog Cloud: Reifensatz $tireSetId '
+        'und zugehörige Historie werden gelöscht.',
+      );
+
+      await _cloudSyncService.deleteTireMountHistoriesForTireSet(tireSetId);
+
+      await _cloudSyncService.deleteTireSet(tireSetId);
+
+      debugPrint(
+        '✅ MotorLog Cloud: Reifensatz $tireSetId '
+        'und zugehörige Historie erfolgreich gelöscht.',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '❌ MotorLog Cloud: Reifensatz $tireSetId konnte nicht '
+        'vollständig aus der Cloud gelöscht werden.',
+      );
+      debugPrint('❌ Fehler: $error');
+      debugPrint('❌ StackTrace: $stackTrace');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // FAHRZEUG-HILFSMETHODEN
+  // ---------------------------------------------------------------------------
 
   Future<Vehicle?> _findVehicle(String vehicleId) async {
     final vehicles = await _database.getVehicles();
