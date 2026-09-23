@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/maintenance_entry.dart';
+import '../../models/maintenance_work.dart';
 import '../../models/vehicle.dart';
 import '../../services/maintenance_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../widgets/motorlog/motorlog_button.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
-import '../../widgets/motorlog/maintenance_category_picker.dart';
+import '../../widgets/motorlog/maintenance_work_picker.dart';
 import '../../widgets/motorlog/motorlog_dropdown.dart';
 import '../../widgets/motorlog/motorlog_section.dart';
 import '../../widgets/motorlog/motorlog_text_field.dart';
@@ -35,7 +36,8 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
   late final TextEditingController _notesController;
 
   String? _selectedVehicleId;
-  late String _selectedCategory;
+  final Set<String> _selectedWorkTypes = <String>{};
+  bool _worksLoaded = false;
   late DateTime _selectedDate;
   DateTime? _nextDate;
 
@@ -50,7 +52,10 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     final entry = widget.entry;
 
     _selectedVehicleId = entry?.vehicleId ?? widget.initialVehicleId;
-    _selectedCategory = entry?.category ?? 'Ölwechsel';
+    if (entry == null) {
+      _selectedWorkTypes.add('oil_change');
+      _worksLoaded = true;
+    }
     _selectedDate = entry?.date ?? DateTime.now();
     _nextDate = entry?.nextDate;
 
@@ -71,6 +76,12 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     );
 
     _notesController = TextEditingController(text: entry?.notes ?? '');
+
+    if (entry != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadExistingWorks();
+      });
+    }
   }
 
   @override
@@ -100,6 +111,76 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     } else {
       _selectedVehicleId = vehicles.first.id;
     }
+  }
+
+  Future<void> _loadExistingWorks() async {
+    final entry = widget.entry;
+    if (entry == null) return;
+
+    final works = await ref
+        .read(maintenanceProvider.notifier)
+        .getWorksForMaintenance(entry.id);
+
+    if (!mounted) return;
+
+    setState(() {
+      _selectedWorkTypes
+        ..clear()
+        ..addAll(works.map((work) => work.type));
+
+      if (_selectedWorkTypes.isEmpty) {
+        _selectedWorkTypes.add(_legacyCategoryToWorkType(entry.category));
+      }
+
+      _worksLoaded = true;
+    });
+  }
+
+  String _legacyCategoryToWorkType(String category) {
+    switch (category) {
+      case 'Ölwechsel':
+        return 'oil_change';
+      case 'Inspektion':
+        return 'inspection';
+      case 'Bremsen':
+        return 'brakes_legacy';
+      case 'TÜV':
+        return 'inspection_hu';
+      case 'Zahnriemen':
+        return 'timing_belt';
+      case 'Luftfilter':
+        return 'air_filter';
+      case 'Innenraumfilter':
+        return 'cabin_filter';
+      case 'Kraftstofffilter':
+        return 'fuel_filter';
+      case 'Zündkerzen':
+        return 'spark_plugs';
+      case 'Kühlmittel':
+        return 'coolant';
+      case 'Getriebeöl':
+        return 'transmission_oil';
+      default:
+        return 'other';
+    }
+  }
+
+  String _legacyCategoryForWorks(Set<String> types) {
+    if (types.contains('inspection')) return 'Inspektion';
+    if (types.contains('oil_change')) return 'Ölwechsel';
+    if (types.any((type) => type.startsWith('brake_')) ||
+        types.contains('brakes_legacy')) {
+      return 'Bremsen';
+    }
+    if (types.contains('inspection_hu')) return 'TÜV';
+    if (types.contains('timing_belt')) return 'Zahnriemen';
+    if (types.contains('air_filter')) return 'Luftfilter';
+    if (types.contains('cabin_filter')) return 'Innenraumfilter';
+    if (types.contains('fuel_filter')) return 'Kraftstofffilter';
+    if (types.contains('spark_plugs')) return 'Zündkerzen';
+    if (types.contains('coolant')) return 'Kühlmittel';
+    if (types.contains('transmission_oil')) return 'Getriebeöl';
+    return 'Sonstiges';
   }
 
   Future<void> _selectDate() async {
@@ -147,6 +228,15 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
       return;
     }
 
+    if (_selectedWorkTypes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bitte mindestens eine Arbeit auswählen.'),
+        ),
+      );
+      return;
+    }
+
     final cost = _parseDecimal(_costController.text);
     final mileage = int.tryParse(_mileageController.text.trim());
 
@@ -172,7 +262,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
       id: widget.entry?.id ?? const Uuid().v4(),
       vehicleId: _selectedVehicleId!,
       date: _selectedDate,
-      category: _selectedCategory,
+      category: _legacyCategoryForWorks(_selectedWorkTypes),
       title: _titleController.text.trim(),
       cost: cost,
       mileage: mileage,
@@ -183,10 +273,36 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
           : _notesController.text.trim(),
     );
 
+    final existingWorks = _isEditing
+        ? await ref
+              .read(maintenanceProvider.notifier)
+              .getWorksForMaintenance(entry.id)
+        : <MaintenanceWork>[];
+
+    final existingByType = {for (final work in existingWorks) work.type: work};
+
+    final works = _selectedWorkTypes.map((type) {
+      final existing = existingByType[type];
+
+      return MaintenanceWork(
+        id: existing?.id ?? const Uuid().v4(),
+        maintenanceEntryId: entry.id,
+        type: type,
+        nextMileage: nextMileage,
+        nextDate: _nextDate,
+        mileageAdvanceNotified: existing?.mileageAdvanceNotified ?? false,
+        mileageDueNotified: existing?.mileageDueNotified ?? false,
+      );
+    }).toList();
+
     if (_isEditing) {
-      await ref.read(maintenanceProvider.notifier).updateMaintenance(entry);
+      await ref
+          .read(maintenanceProvider.notifier)
+          .updateMaintenance(entry, works: works);
     } else {
-      await ref.read(maintenanceProvider.notifier).addMaintenance(entry);
+      await ref
+          .read(maintenanceProvider.notifier)
+          .addMaintenance(entry, works: works);
     }
 
     if (mounted) {
@@ -298,15 +414,23 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                       margin: EdgeInsets.zero,
                       child: Column(
                         children: [
-                          MaintenanceCategoryPicker(
-                            value: _selectedCategory,
-                            enabled: !_isSaving,
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedCategory = value;
-                              });
-                            },
-                          ),
+                          if (_worksLoaded)
+                            MaintenanceWorkPicker(
+                              selectedTypes: _selectedWorkTypes,
+                              enabled: !_isSaving,
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedWorkTypes
+                                    ..clear()
+                                    ..addAll(value);
+                                });
+                              },
+                            )
+                          else
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 18),
+                              child: Center(child: CircularProgressIndicator()),
+                            ),
                           const SizedBox(height: 16),
                           MotorLogTextField(
                             controller: _titleController,

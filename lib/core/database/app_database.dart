@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/expense.dart';
 import '../../models/fuel_entry.dart';
 import '../../models/maintenance_entry.dart';
+import '../../models/maintenance_work.dart';
 import '../../models/tire_mount_history.dart';
 import '../../models/tire_set.dart';
 import '../../models/vehicle.dart';
@@ -24,7 +25,7 @@ class AppDatabase {
   static const String _legacyOwnerUserId =
       'edd8f72d-40ab-47cd-aaea-e540fb49eeaa';
 
-  static const int _databaseVersion = 12;
+  static const int _databaseVersion = 13;
 
   Database? _database;
   String? _activeUserId;
@@ -166,6 +167,7 @@ class AppDatabase {
     await _createFuelEntriesTable(db);
     await _createExpensesTable(db);
     await _createMaintenanceTable(db);
+    await _createMaintenanceWorksTable(db);
     await _createTireSetsTable(db);
     await _createDocumentsTable(db);
     await _createTireMountHistoryTable(db);
@@ -225,6 +227,28 @@ class AppDatabase {
         FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
           ON DELETE CASCADE
       )
+    ''');
+  }
+
+  Future<void> _createMaintenanceWorksTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE maintenance_works (
+        id TEXT PRIMARY KEY,
+        maintenance_entry_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        next_mileage INTEGER,
+        next_date TEXT,
+        mileage_advance_notified INTEGER NOT NULL DEFAULT 0,
+        mileage_due_notified INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (maintenance_entry_id)
+          REFERENCES maintenance_entries (id)
+          ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX index_maintenance_works_entry_id
+      ON maintenance_works (maintenance_entry_id)
     ''');
   }
 
@@ -377,6 +401,68 @@ class AppDatabase {
         'ALTER TABLE tire_sets '
         'ADD COLUMN total_mileage INTEGER NOT NULL DEFAULT 0',
       );
+    }
+
+    if (oldVersion < 13) {
+      await _createMaintenanceWorksTable(db);
+
+      final existingEntries = await db.query(
+        'maintenance_entries',
+        columns: [
+          'id',
+          'category',
+          'next_mileage',
+          'next_date',
+          'mileage_advance_notified',
+          'mileage_due_notified',
+        ],
+      );
+
+      for (final entry in existingEntries) {
+        final maintenanceEntryId = entry['id'] as String;
+        final category = entry['category'] as String;
+
+        await db.insert('maintenance_works', {
+          'id': '${maintenanceEntryId}_legacy',
+          'maintenance_entry_id': maintenanceEntryId,
+          'type': _legacyMaintenanceCategoryToType(category),
+          'next_mileage': entry['next_mileage'],
+          'next_date': entry['next_date'],
+          'mileage_advance_notified': entry['mileage_advance_notified'] ?? 0,
+          'mileage_due_notified': entry['mileage_due_notified'] ?? 0,
+        });
+      }
+    }
+  }
+
+  String _legacyMaintenanceCategoryToType(String category) {
+    switch (category) {
+      case 'Ölwechsel':
+        return 'oil_change';
+      case 'Inspektion':
+        return 'inspection';
+      case 'Bremsen':
+        return 'brakes_legacy';
+      case 'TÜV':
+        return 'inspection_hu';
+      case 'Zahnriemen':
+        return 'timing_belt';
+      case 'Luftfilter':
+        return 'air_filter';
+      case 'Innenraumfilter':
+        return 'cabin_filter';
+      case 'Kraftstofffilter':
+        return 'fuel_filter';
+      case 'Zündkerzen':
+        return 'spark_plugs';
+      case 'Kühlmittel':
+        return 'coolant';
+      case 'Getriebeöl':
+        return 'transmission_oil';
+      case 'Sonstiges':
+        return 'other';
+      default:
+        return 'other';
     }
   }
 
@@ -588,6 +674,58 @@ class AppDatabase {
       values,
       where: 'id = ?',
       whereArgs: [maintenanceId],
+    );
+  }
+
+  Future<List<MaintenanceWork>> getMaintenanceWorks({
+    String? maintenanceEntryId,
+  }) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'maintenance_works',
+      where: maintenanceEntryId == null ? null : 'maintenance_entry_id = ?',
+      whereArgs: maintenanceEntryId == null ? null : [maintenanceEntryId],
+      orderBy: 'rowid ASC',
+    );
+
+    return maps.map(MaintenanceWork.fromMap).toList();
+  }
+
+  Future<void> insertMaintenanceWork(MaintenanceWork work) async {
+    final db = await database;
+
+    await db.insert(
+      'maintenance_works',
+      work.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateMaintenanceWork(MaintenanceWork work) async {
+    final db = await database;
+
+    await db.update(
+      'maintenance_works',
+      work.toMap(),
+      where: 'id = ?',
+      whereArgs: [work.id],
+    );
+  }
+
+  Future<void> deleteMaintenanceWork(String id) async {
+    final db = await database;
+
+    await db.delete('maintenance_works', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteMaintenanceWorksForEntry(String maintenanceEntryId) async {
+    final db = await database;
+
+    await db.delete(
+      'maintenance_works',
+      where: 'maintenance_entry_id = ?',
+      whereArgs: [maintenanceEntryId],
     );
   }
 

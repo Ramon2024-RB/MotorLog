@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense.dart';
 import '../models/fuel_entry.dart';
 import '../models/maintenance_entry.dart';
+import '../models/maintenance_work.dart';
 import '../models/tire_mount_history.dart';
 import '../models/tire_set.dart';
 import '../models/vehicle.dart';
@@ -439,6 +440,117 @@ class CloudSyncService {
         .eq('user_id', user.id);
   }
 
+  Future<void> uploadMaintenanceWork(MaintenanceWork work) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase.from('maintenance_works_cloud').upsert({
+      'id': work.id,
+      'user_id': user.id,
+      'maintenance_entry_id': work.maintenanceEntryId,
+      'type': work.type,
+      'next_mileage': work.nextMileage,
+      'next_date': work.nextDate?.toIso8601String(),
+      'mileage_advance_notified': work.mileageAdvanceNotified,
+      'mileage_due_notified': work.mileageDueNotified,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> uploadMaintenanceWorks(List<MaintenanceWork> works) async {
+    await _requirePremium();
+
+    if (works.isEmpty) {
+      return;
+    }
+
+    final user = _currentUser!;
+    final updatedAt = DateTime.now().toUtc().toIso8601String();
+
+    final rows = works.map((work) {
+      return {
+        'id': work.id,
+        'user_id': user.id,
+        'maintenance_entry_id': work.maintenanceEntryId,
+        'type': work.type,
+        'next_mileage': work.nextMileage,
+        'next_date': work.nextDate?.toIso8601String(),
+        'mileage_advance_notified': work.mileageAdvanceNotified,
+        'mileage_due_notified': work.mileageDueNotified,
+        'updated_at': updatedAt,
+      };
+    }).toList();
+
+    await _supabase.from('maintenance_works_cloud').upsert(rows);
+  }
+
+  Future<List<MaintenanceWork>> downloadMaintenanceWorks({
+    String? maintenanceEntryId,
+  }) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    var query = _supabase
+        .from('maintenance_works_cloud')
+        .select()
+        .eq('user_id', user.id);
+
+    if (maintenanceEntryId != null) {
+      query = query.eq('maintenance_entry_id', maintenanceEntryId);
+    }
+
+    final rows = await query.order('created_at');
+
+    return rows.map<MaintenanceWork>((row) {
+      return MaintenanceWork(
+        id: row['id'] as String,
+        maintenanceEntryId: row['maintenance_entry_id'] as String,
+        type: row['type'] as String,
+        nextMileage: row['next_mileage'] as int?,
+        nextDate: row['next_date'] == null
+            ? null
+            : DateTime.parse(row['next_date'] as String),
+        mileageAdvanceNotified: row['mileage_advance_notified'] == true,
+        mileageDueNotified: row['mileage_due_notified'] == true,
+      );
+    }).toList();
+  }
+
+  Future<void> replaceMaintenanceWorks(
+    String maintenanceEntryId,
+    List<MaintenanceWork> works,
+  ) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase
+        .from('maintenance_works_cloud')
+        .delete()
+        .eq('maintenance_entry_id', maintenanceEntryId)
+        .eq('user_id', user.id);
+
+    if (works.isEmpty) {
+      return;
+    }
+
+    await uploadMaintenanceWorks(works);
+  }
+
+  Future<void> deleteMaintenanceWorksForEntry(String maintenanceEntryId) async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    await _supabase
+        .from('maintenance_works_cloud')
+        .delete()
+        .eq('maintenance_entry_id', maintenanceEntryId)
+        .eq('user_id', user.id);
+  }
+
   // ---------------------------------------------------------------------------
   // REIFENSÄTZE
   // ---------------------------------------------------------------------------
@@ -848,6 +960,19 @@ class CloudSyncService {
 
     final rows = await _supabase
         .from('maintenance_entries_cloud')
+        .select('id')
+        .eq('user_id', user.id);
+
+    return rows.length;
+  }
+
+  Future<int> getCloudMaintenanceWorkCount() async {
+    await _requirePremium();
+
+    final user = _currentUser!;
+
+    final rows = await _supabase
+        .from('maintenance_works_cloud')
         .select('id')
         .eq('user_id', user.id);
 

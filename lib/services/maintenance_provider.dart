@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/database/app_database.dart';
 import '../models/maintenance_entry.dart';
+import '../models/maintenance_work.dart';
 import 'cloud_sync_service.dart';
 import 'notification_service.dart';
 import 'premium_provider.dart';
@@ -24,20 +25,56 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
 
   Future<void> reload() async {
     state = const AsyncLoading();
-
     state = await AsyncValue.guard(_database.getMaintenanceEntries);
+  }
+
+  // ---------------------------------------------------------------------------
+  // WARTUNGSARBEITEN
+  // ---------------------------------------------------------------------------
+
+  Future<List<MaintenanceWork>> getWorksForMaintenance(
+    String maintenanceEntryId,
+  ) {
+    return _database.getMaintenanceWorks(
+      maintenanceEntryId: maintenanceEntryId,
+    );
+  }
+
+  Future<void> _replaceLocalMaintenanceWorks(
+    String maintenanceEntryId,
+    List<MaintenanceWork> works,
+  ) async {
+    await _database.deleteMaintenanceWorksForEntry(maintenanceEntryId);
+
+    for (final work in works) {
+      await _database.insertMaintenanceWork(work);
+    }
   }
 
   // ---------------------------------------------------------------------------
   // WARTUNG HINZUFÜGEN
   // ---------------------------------------------------------------------------
 
-  Future<void> addMaintenance(MaintenanceEntry entry) async {
+  Future<void> addMaintenance(
+    MaintenanceEntry entry, {
+    List<MaintenanceWork>? works,
+  }) async {
     debugPrint('🔧 MotorLog: Wartung "${entry.title}" wird lokal gespeichert.');
 
     await _database.insertMaintenanceEntry(entry);
 
+    if (works != null) {
+      await _replaceLocalMaintenanceWorks(entry.id, works);
+    }
+
     debugPrint('✅ MotorLog: Wartung "${entry.title}" lokal gespeichert.');
+
+    if (works != null) {
+      debugPrint(
+        '✅ MotorLog: ${works.length} Wartungsarbeit(en) '
+        'lokal gespeichert.',
+      );
+    }
 
     try {
       await _notificationService.scheduleMaintenanceNotification(entry);
@@ -63,7 +100,7 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
       debugPrint('⚠️ Fehler: $error');
     }
 
-    await _tryUploadMaintenanceEntry(entry);
+    await _tryUploadMaintenance(entry, works: works);
 
     await reload();
   }
@@ -72,12 +109,18 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
   // WARTUNG AKTUALISIEREN
   // ---------------------------------------------------------------------------
 
-  Future<void> updateMaintenance(MaintenanceEntry entry) async {
+  Future<void> updateMaintenance(
+    MaintenanceEntry entry, {
+    List<MaintenanceWork>? works,
+  }) async {
     await _database.updateMaintenanceEntry(entry);
+
+    if (works != null) {
+      await _replaceLocalMaintenanceWorks(entry.id, works);
+    }
 
     try {
       await _notificationService.cancelMaintenanceNotification(entry.id);
-
       await _notificationService.scheduleMaintenanceNotification(entry);
     } catch (error) {
       debugPrint(
@@ -107,7 +150,7 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
       '"${entry.title}" startet.',
     );
 
-    await _tryUploadMaintenanceEntry(entry);
+    await _tryUploadMaintenance(entry, works: works);
 
     await reload();
   }
@@ -148,24 +191,31 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
     }
 
     final entries = await _database.getMaintenanceEntries();
+    final works = await _database.getMaintenanceWorks();
 
     debugPrint(
       '☁️ MotorLog Cloud: Backup von ${entries.length} Wartung(en) '
-      'wird gestartet.',
+      'und ${works.length} Wartungsarbeit(en) wird gestartet.',
     );
 
-    if (entries.isEmpty) {
+    if (entries.isNotEmpty) {
+      await _cloudSyncService.uploadMaintenanceEntries(entries);
+    }
+
+    if (works.isNotEmpty) {
+      await _cloudSyncService.uploadMaintenanceWorks(works);
+    }
+
+    if (entries.isEmpty && works.isEmpty) {
       debugPrint(
         'ℹ️ MotorLog Cloud: Keine lokalen Wartungen zum Sichern vorhanden.',
       );
       return;
     }
 
-    await _cloudSyncService.uploadMaintenanceEntries(entries);
-
     debugPrint(
-      '✅ MotorLog Cloud: ${entries.length} Wartung(en) '
-      'erfolgreich gesichert.',
+      '✅ MotorLog Cloud: ${entries.length} Wartung(en) und '
+      '${works.length} Wartungsarbeit(en) erfolgreich gesichert.',
     );
   }
 
@@ -185,14 +235,57 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
     debugPrint('☁️ MotorLog Cloud: Wartungs-Download wird gestartet.');
 
     final cloudEntries = await _cloudSyncService.downloadMaintenanceEntries();
+    final cloudWorks = await _cloudSyncService.downloadMaintenanceWorks();
 
     debugPrint(
-      '☁️ MotorLog Cloud: ${cloudEntries.length} Wartung(en) '
-      'aus der Cloud geladen.',
+      '☁️ MotorLog Cloud: ${cloudEntries.length} Wartung(en) und '
+      '${cloudWorks.length} Wartungsarbeit(en) aus der Cloud geladen.',
     );
+
+    final worksByEntry = <String, List<MaintenanceWork>>{};
+
+    for (final work in cloudWorks) {
+      worksByEntry
+          .putIfAbsent(work.maintenanceEntryId, () => <MaintenanceWork>[])
+          .add(work);
+    }
 
     for (final entry in cloudEntries) {
       await _database.insertMaintenanceEntry(entry);
+
+      final entryWorks = worksByEntry[entry.id];
+
+      if (entryWorks != null && entryWorks.isNotEmpty) {
+        await _replaceLocalMaintenanceWorks(entry.id, entryWorks);
+
+        debugPrint(
+          '📱 MotorLog lokal: ${entryWorks.length} Wartungsarbeit(en) '
+          'für "${entry.title}" wiederhergestellt.',
+        );
+      } else {
+        final existingWorks = await _database.getMaintenanceWorks(
+          maintenanceEntryId: entry.id,
+        );
+
+        if (existingWorks.isEmpty) {
+          await _database.insertMaintenanceWork(
+            MaintenanceWork(
+              id: '${entry.id}_cloud_legacy',
+              maintenanceEntryId: entry.id,
+              type: _legacyCategoryToWorkType(entry.category),
+              nextMileage: entry.nextMileage,
+              nextDate: entry.nextDate,
+              mileageAdvanceNotified: entry.mileageAdvanceNotified,
+              mileageDueNotified: entry.mileageDueNotified,
+            ),
+          );
+
+          debugPrint(
+            'ℹ️ MotorLog lokal: Für ältere Cloud-Wartung '
+            '"${entry.title}" wurde eine Legacy-Arbeit erzeugt.',
+          );
+        }
+      }
 
       try {
         await _notificationService.cancelMaintenanceNotification(entry.id);
@@ -235,10 +328,48 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
   }
 
   // ---------------------------------------------------------------------------
+  // LEGACY-KATEGORIEN
+  // ---------------------------------------------------------------------------
+
+  String _legacyCategoryToWorkType(String category) {
+    switch (category) {
+      case 'Ölwechsel':
+        return 'oil_change';
+      case 'Inspektion':
+        return 'inspection';
+      case 'Bremsen':
+        return 'brakes_legacy';
+      case 'TÜV':
+        return 'inspection_hu';
+      case 'Zahnriemen':
+        return 'timing_belt';
+      case 'Luftfilter':
+        return 'air_filter';
+      case 'Innenraumfilter':
+        return 'cabin_filter';
+      case 'Kraftstofffilter':
+        return 'fuel_filter';
+      case 'Zündkerzen':
+        return 'spark_plugs';
+      case 'Kühlmittel':
+        return 'coolant';
+      case 'Getriebeöl':
+        return 'transmission_oil';
+      case 'Sonstiges':
+        return 'other';
+      default:
+        return 'other';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // CLOUD-HILFSMETHODEN
   // ---------------------------------------------------------------------------
 
-  Future<void> _tryUploadMaintenanceEntry(MaintenanceEntry entry) async {
+  Future<void> _tryUploadMaintenance(
+    MaintenanceEntry entry, {
+    List<MaintenanceWork>? works,
+  }) async {
     try {
       final isPremium = await _isPremium();
 
@@ -255,14 +386,25 @@ class MaintenanceNotifier extends AsyncNotifier<List<MaintenanceEntry>> {
 
       await _cloudSyncService.uploadMaintenanceEntry(entry);
 
+      if (works != null) {
+        await _cloudSyncService.replaceMaintenanceWorks(entry.id, works);
+      }
+
       debugPrint(
         '✅ MotorLog Cloud: Wartung "${entry.title}" '
         'erfolgreich hochgeladen.',
       );
+
+      if (works != null) {
+        debugPrint(
+          '✅ MotorLog Cloud: ${works.length} Wartungsarbeit(en) '
+          'für "${entry.title}" synchronisiert.',
+        );
+      }
     } catch (error, stackTrace) {
       debugPrint(
         '❌ MotorLog Cloud: Wartung "${entry.title}" '
-        'konnte nicht hochgeladen werden.',
+        'konnte nicht vollständig hochgeladen werden.',
       );
       debugPrint('❌ Fehler: $error');
       debugPrint('❌ StackTrace: $stackTrace');
