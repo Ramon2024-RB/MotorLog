@@ -8,6 +8,7 @@ import '../../services/maintenance_provider.dart';
 import '../../services/vehicle_provider.dart';
 import '../../widgets/motorlog/motorlog_button.dart';
 import '../../widgets/motorlog/motorlog_card.dart';
+import '../../widgets/motorlog/maintenance_category_picker.dart';
 import '../../widgets/motorlog/motorlog_dropdown.dart';
 import '../../widgets/motorlog/motorlog_section.dart';
 import '../../widgets/motorlog/motorlog_text_field.dart';
@@ -41,21 +42,6 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
   bool _isSaving = false;
 
   bool get _isEditing => widget.entry != null;
-
-  static const List<String> _categories = [
-    'Ölwechsel',
-    'Inspektion',
-    'Bremsen',
-    'TÜV',
-    'Zahnriemen',
-    'Luftfilter',
-    'Innenraumfilter',
-    'Kraftstofffilter',
-    'Zündkerzen',
-    'Kühlmittel',
-    'Getriebeöl',
-    'Sonstiges',
-  ];
 
   @override
   void initState() {
@@ -215,35 +201,6 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     return '$day.$month.${date.year}';
   }
 
-  IconData _categoryIcon(String category) {
-    switch (category) {
-      case 'Ölwechsel':
-        return Icons.oil_barrel_outlined;
-      case 'Inspektion':
-        return Icons.fact_check_outlined;
-      case 'Bremsen':
-        return Icons.car_repair;
-      case 'TÜV':
-        return Icons.verified_outlined;
-      case 'Zahnriemen':
-        return Icons.settings_outlined;
-      case 'Luftfilter':
-        return Icons.air_outlined;
-      case 'Innenraumfilter':
-        return Icons.airline_seat_recline_normal;
-      case 'Kraftstofffilter':
-        return Icons.local_gas_station_outlined;
-      case 'Zündkerzen':
-        return Icons.electric_bolt_outlined;
-      case 'Kühlmittel':
-        return Icons.ac_unit_outlined;
-      case 'Getriebeöl':
-        return Icons.settings_suggest_outlined;
-      default:
-        return Icons.build_outlined;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final vehiclesAsync = ref.watch(vehicleProvider);
@@ -341,25 +298,14 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                       margin: EdgeInsets.zero,
                       child: Column(
                         children: [
-                          MotorLogDropdown<String>(
+                          MaintenanceCategoryPicker(
                             value: _selectedCategory,
-                            label: 'Kategorie',
-                            icon: _categoryIcon(_selectedCategory),
-                            items: _categories.map((category) {
-                              return DropdownMenuItem<String>(
-                                value: category,
-                                child: Text(category),
-                              );
-                            }).toList(),
-                            onChanged: _isSaving
-                                ? null
-                                : (value) {
-                                    if (value != null) {
-                                      setState(() {
-                                        _selectedCategory = value;
-                                      });
-                                    }
-                                  },
+                            enabled: !_isSaving,
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedCategory = value;
+                              });
+                            },
                           ),
                           const SizedBox(height: 16),
                           MotorLogTextField(
