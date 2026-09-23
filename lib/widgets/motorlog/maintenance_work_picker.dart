@@ -12,16 +12,30 @@ class MaintenanceWorkOption {
   final IconData icon;
 }
 
+class MaintenanceWorkPickerValue {
+  const MaintenanceWorkPickerValue({
+    required this.selectedTypes,
+    required this.customWorkNames,
+  });
+
+  final Set<String> selectedTypes;
+  final List<String> customWorkNames;
+
+  int get count => selectedTypes.length + customWorkNames.length;
+}
+
 class MaintenanceWorkPicker extends StatelessWidget {
   const MaintenanceWorkPicker({
     super.key,
     required this.selectedTypes,
+    required this.customWorkNames,
     required this.onChanged,
     this.enabled = true,
   });
 
   final Set<String> selectedTypes;
-  final ValueChanged<Set<String>> onChanged;
+  final List<String> customWorkNames;
+  final ValueChanged<MaintenanceWorkPickerValue> onChanged;
   final bool enabled;
 
   static const List<_MaintenanceWorkGroup> _groups = [
@@ -186,23 +200,20 @@ class MaintenanceWorkPicker extends StatelessWidget {
   }
 
   Future<void> _openPicker(BuildContext context) async {
-    if (!enabled) {
-      return;
-    }
+    if (!enabled) return;
 
-    final selected = await showModalBottomSheet<Set<String>>(
+    final selected = await showModalBottomSheet<MaintenanceWorkPickerValue>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        return _MaintenanceWorkSheet(initiallySelected: selectedTypes);
-      },
+      builder: (context) => _MaintenanceWorkSheet(
+        initiallySelected: selectedTypes,
+        initialCustomWorkNames: customWorkNames,
+      ),
     );
 
-    if (selected != null) {
-      onChanged(selected);
-    }
+    if (selected != null) onChanged(selected);
   }
 
   @override
@@ -210,6 +221,8 @@ class MaintenanceWorkPicker extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
 
     final selectedNames = selectedTypes.map(nameForType).toList()..sort();
+    final allSelectedNames = [...selectedNames, ...customWorkNames];
+    final selectedCount = allSelectedNames.length;
 
     return Material(
       color: Colors.transparent,
@@ -258,7 +271,7 @@ class MaintenanceWorkPicker extends StatelessWidget {
                                 ? 'Arbeiten auswählen'
                                 : selectedTypes.length == 1
                                 ? '1 Arbeit ausgewählt'
-                                : '${selectedTypes.length} Arbeiten ausgewählt',
+                                : '$selectedCount Arbeiten ausgewählt',
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w600),
                           ),
@@ -271,12 +284,12 @@ class MaintenanceWorkPicker extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (selectedNames.isNotEmpty) ...[
+                if (allSelectedNames.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   Wrap(
                     spacing: 7,
                     runSpacing: 7,
-                    children: selectedNames.map((name) {
+                    children: allSelectedNames.map((name) {
                       return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -310,9 +323,13 @@ class MaintenanceWorkPicker extends StatelessWidget {
 }
 
 class _MaintenanceWorkSheet extends StatefulWidget {
-  const _MaintenanceWorkSheet({required this.initiallySelected});
+  const _MaintenanceWorkSheet({
+    required this.initiallySelected,
+    required this.initialCustomWorkNames,
+  });
 
   final Set<String> initiallySelected;
+  final List<String> initialCustomWorkNames;
 
   @override
   State<_MaintenanceWorkSheet> createState() => _MaintenanceWorkSheetState();
@@ -322,12 +339,14 @@ class _MaintenanceWorkSheetState extends State<_MaintenanceWorkSheet> {
   final TextEditingController _searchController = TextEditingController();
 
   late Set<String> _selectedTypes;
+  late List<String> _customWorkNames;
   String _query = '';
 
   @override
   void initState() {
     super.initState();
     _selectedTypes = {...widget.initiallySelected};
+    _customWorkNames = [...widget.initialCustomWorkNames];
   }
 
   @override
@@ -356,9 +375,55 @@ class _MaintenanceWorkSheetState extends State<_MaintenanceWorkSheet> {
     });
   }
 
+  Future<void> _addCustomWork() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eigene Arbeit hinzufügen'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(
+            labelText: 'Bezeichnung',
+            hintText: 'z. B. Kupplung erneuert',
+          ),
+          onSubmitted: (value) {
+            final name = value.trim();
+            if (name.isNotEmpty) Navigator.of(dialogContext).pop(name);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) Navigator.of(dialogContext).pop(name);
+            },
+            child: const Text('Hinzufügen'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || name == null || name.trim().isEmpty) return;
+    setState(() => _customWorkNames.add(name.trim()));
+  }
+
+  void _removeCustomWork(int index) {
+    setState(() => _customWorkNames.removeAt(index));
+  }
+
+  int get _selectedCount => _selectedTypes.length + _customWorkNames.length;
+
   void _clearSelection() {
     setState(() {
       _selectedTypes.clear();
+      _customWorkNames.clear();
     });
   }
 
@@ -437,14 +502,14 @@ class _MaintenanceWorkSheetState extends State<_MaintenanceWorkSheet> {
                         ? 'Noch nichts ausgewählt'
                         : _selectedTypes.length == 1
                         ? '1 Arbeit ausgewählt'
-                        : '${_selectedTypes.length} Arbeiten ausgewählt',
+                        : '$_selectedCount Arbeiten ausgewählt',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colors.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                if (_selectedTypes.isNotEmpty)
+                if (_selectedCount > 0)
                   TextButton(
                     onPressed: _clearSelection,
                     child: const Text('Alle entfernen'),
@@ -493,6 +558,38 @@ class _MaintenanceWorkSheetState extends State<_MaintenanceWorkSheet> {
                   borderSide: BorderSide(color: colors.primary, width: 1.5),
                 ),
               ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _addCustomWork,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Eigene Arbeit hinzufügen'),
+                ),
+                if (_customWorkNames.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (
+                        var index = 0;
+                        index < _customWorkNames.length;
+                        index++
+                      )
+                        InputChip(
+                          avatar: const Icon(Icons.build_outlined, size: 18),
+                          label: Text(_customWorkNames[index]),
+                          onDeleted: () => _removeCustomWork(index),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
           Divider(
@@ -590,12 +687,17 @@ class _MaintenanceWorkSheetState extends State<_MaintenanceWorkSheet> {
             child: SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _selectedTypes.isEmpty
+                onPressed: _selectedCount == 0
                     ? null
                     : () {
-                        Navigator.of(
-                          context,
-                        ).pop(Set<String>.from(_selectedTypes));
+                        Navigator.of(context).pop(
+                          MaintenanceWorkPickerValue(
+                            selectedTypes: Set<String>.from(_selectedTypes),
+                            customWorkNames: List<String>.from(
+                              _customWorkNames,
+                            ),
+                          ),
+                        );
                       },
                 icon: const Icon(Icons.check),
                 label: Text(

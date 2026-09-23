@@ -37,6 +37,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
 
   String? _selectedVehicleId;
   final Set<String> _selectedWorkTypes = <String>{};
+  final List<String> _customWorkNames = <String>[];
   bool _worksLoaded = false;
   late DateTime _selectedDate;
   DateTime? _nextDate;
@@ -126,9 +127,20 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     setState(() {
       _selectedWorkTypes
         ..clear()
-        ..addAll(works.map((work) => work.type));
+        ..addAll(
+          works.where((work) => work.type != 'custom').map((work) => work.type),
+        );
 
-      if (_selectedWorkTypes.isEmpty) {
+      _customWorkNames
+        ..clear()
+        ..addAll(
+          works
+              .where((work) => work.type == 'custom')
+              .map((work) => work.customName?.trim() ?? '')
+              .where((name) => name.isNotEmpty),
+        );
+
+      if (_selectedWorkTypes.isEmpty && _customWorkNames.isEmpty) {
         _selectedWorkTypes.add(_legacyCategoryToWorkType(entry.category));
       }
 
@@ -228,7 +240,7 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
       return;
     }
 
-    if (_selectedWorkTypes.isEmpty) {
+    if (_selectedWorkTypes.isEmpty && _customWorkNames.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Bitte mindestens eine Arbeit auswählen.'),
@@ -279,21 +291,54 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
               .getWorksForMaintenance(entry.id)
         : <MaintenanceWork>[];
 
-    final existingByType = {for (final work in existingWorks) work.type: work};
+    final existingByType = <String, MaintenanceWork>{
+      for (final work in existingWorks)
+        if (work.type != 'custom') work.type: work,
+    };
 
-    final works = _selectedWorkTypes.map((type) {
-      final existing = existingByType[type];
+    final existingCustomWorks = existingWorks
+        .where((work) => work.type == 'custom')
+        .toList();
+    final usedCustomWorkIds = <String>{};
 
-      return MaintenanceWork(
-        id: existing?.id ?? const Uuid().v4(),
-        maintenanceEntryId: entry.id,
-        type: type,
-        nextMileage: nextMileage,
-        nextDate: _nextDate,
-        mileageAdvanceNotified: existing?.mileageAdvanceNotified ?? false,
-        mileageDueNotified: existing?.mileageDueNotified ?? false,
-      );
-    }).toList();
+    final works = <MaintenanceWork>[
+      ..._selectedWorkTypes.map((type) {
+        final existing = existingByType[type];
+
+        return MaintenanceWork(
+          id: existing?.id ?? const Uuid().v4(),
+          maintenanceEntryId: entry.id,
+          type: type,
+          nextMileage: nextMileage,
+          nextDate: _nextDate,
+          mileageAdvanceNotified: existing?.mileageAdvanceNotified ?? false,
+          mileageDueNotified: existing?.mileageDueNotified ?? false,
+        );
+      }),
+      ..._customWorkNames.map((customName) {
+        MaintenanceWork? existing;
+
+        for (final work in existingCustomWorks) {
+          if (!usedCustomWorkIds.contains(work.id) &&
+              work.customName?.trim() == customName.trim()) {
+            existing = work;
+            usedCustomWorkIds.add(work.id);
+            break;
+          }
+        }
+
+        return MaintenanceWork(
+          id: existing?.id ?? const Uuid().v4(),
+          maintenanceEntryId: entry.id,
+          type: 'custom',
+          customName: customName.trim(),
+          nextMileage: nextMileage,
+          nextDate: _nextDate,
+          mileageAdvanceNotified: existing?.mileageAdvanceNotified ?? false,
+          mileageDueNotified: existing?.mileageDueNotified ?? false,
+        );
+      }),
+    ];
 
     if (_isEditing) {
       await ref
@@ -417,12 +462,17 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                           if (_worksLoaded)
                             MaintenanceWorkPicker(
                               selectedTypes: _selectedWorkTypes,
+                              customWorkNames: _customWorkNames,
                               enabled: !_isSaving,
                               onChanged: (value) {
                                 setState(() {
                                   _selectedWorkTypes
                                     ..clear()
-                                    ..addAll(value);
+                                    ..addAll(value.selectedTypes);
+
+                                  _customWorkNames
+                                    ..clear()
+                                    ..addAll(value.customWorkNames);
                                 });
                               },
                             )

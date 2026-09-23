@@ -25,7 +25,7 @@ class AppDatabase {
   static const String _legacyOwnerUserId =
       'edd8f72d-40ab-47cd-aaea-e540fb49eeaa';
 
-  static const int _databaseVersion = 13;
+  static const int _databaseVersion = 14;
 
   Database? _database;
   String? _activeUserId;
@@ -236,6 +236,7 @@ class AppDatabase {
         id TEXT PRIMARY KEY,
         maintenance_entry_id TEXT NOT NULL,
         type TEXT NOT NULL,
+        custom_name TEXT,
         next_mileage INTEGER,
         next_date TEXT,
         mileage_advance_notified INTEGER NOT NULL DEFAULT 0,
@@ -432,6 +433,13 @@ class AppDatabase {
           'mileage_due_notified': entry['mileage_due_notified'] ?? 0,
         });
       }
+    }
+
+    if (oldVersion < 14) {
+      await db.execute(
+        'ALTER TABLE maintenance_works '
+        'ADD COLUMN custom_name TEXT',
+      );
     }
   }
 

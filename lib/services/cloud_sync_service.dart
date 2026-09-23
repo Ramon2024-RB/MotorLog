@@ -450,6 +450,7 @@ class CloudSyncService {
       'user_id': user.id,
       'maintenance_entry_id': work.maintenanceEntryId,
       'type': work.type,
+      'custom_name': work.customName,
       'next_mileage': work.nextMileage,
       'next_date': work.nextDate?.toIso8601String(),
       'mileage_advance_notified': work.mileageAdvanceNotified,
@@ -474,6 +475,7 @@ class CloudSyncService {
         'user_id': user.id,
         'maintenance_entry_id': work.maintenanceEntryId,
         'type': work.type,
+        'custom_name': work.customName,
         'next_mileage': work.nextMileage,
         'next_date': work.nextDate?.toIso8601String(),
         'mileage_advance_notified': work.mileageAdvanceNotified,
@@ -508,6 +510,7 @@ class CloudSyncService {
         id: row['id'] as String,
         maintenanceEntryId: row['maintenance_entry_id'] as String,
         type: row['type'] as String,
+        customName: row['custom_name'] as String?,
         nextMileage: row['next_mileage'] as int?,
         nextDate: row['next_date'] == null
             ? null
