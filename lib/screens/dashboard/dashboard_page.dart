@@ -284,20 +284,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
               children: [
                 Text(
-                  'Guten Tag, Nico',
+                  'Deine Garage',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Hier siehst du alles Wichtige zu deinen Fahrzeugen.',
+                  'Alles im Blick. Jede Fahrt zählt.',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 20),
 
                 SizedBox(
-                  height: 190,
+                  height: 216,
                   child: PageView.builder(
                     controller: PageController(
                       viewportFraction: sortedVehicles.length > 1 ? 0.94 : 1.0,
@@ -355,8 +355,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   ),
                 ],
 
-                const SizedBox(height: 26),
-                const _SectionTitle(title: 'Schnellzugriff'),
+                const SizedBox(height: 24),
+                _DashboardStatusStrip(
+                  upcoming: upcomingMaintenance,
+                  vehicle: selectedVehicle,
+                  onTap: () => _openMaintenance(selectedVehicle),
+                ),
+                const SizedBox(height: 28),
+                const _SectionTitle(title: 'Direkt starten'),
                 const SizedBox(height: 12),
 
                 Row(
@@ -366,7 +372,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       child: _QuickActionCard(
                         icon: Icons.local_gas_station_outlined,
                         title: 'Tanken',
-                        subtitle: 'Tankvorgang erfassen',
+                        subtitle: 'Neuer Eintrag',
                         onTap: () {
                           _openFuel(selectedVehicle);
                         },
@@ -377,7 +383,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       child: _QuickActionCard(
                         icon: Icons.build_outlined,
                         title: 'Wartung',
-                        subtitle: 'Wartung erfassen',
+                        subtitle: 'Service & Pflege',
                         onTap: () {
                           _openMaintenance(selectedVehicle);
                         },
@@ -395,7 +401,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       child: _QuickActionCard(
                         icon: Icons.tire_repair,
                         title: 'Reifen',
-                        subtitle: 'Reifensätze verwalten',
+                        subtitle: 'Reifensätze',
                         onTap: () {
                           _openTires(selectedVehicle);
                         },
@@ -406,7 +412,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       child: _QuickActionCard(
                         icon: Icons.description_outlined,
                         title: 'Dokumente',
-                        subtitle: 'Unterlagen verwalten',
+                        subtitle: 'Fahrzeugakte',
                         onTap: () {
                           _openDocuments(selectedVehicle);
                         },
@@ -455,7 +461,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
                 const SizedBox(height: 18),
 
-                const _SectionTitle(title: 'Übersicht'),
+                const _SectionTitle(title: 'Performance & Kosten'),
 
                 const SizedBox(height: 12),
 
@@ -506,51 +512,137 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
                 const SizedBox(height: 30),
 
-                const _SectionTitle(title: 'Letzte Einträge'),
+                const _SectionTitle(title: 'Aktivitäten'),
 
                 const SizedBox(height: 12),
 
-                if (latestFuel != null)
-                  _LatestEntryCard(
-                    icon: Icons.local_gas_station,
-                    title: latestFuel.station ?? 'Tankvorgang',
-                    subtitle:
-                        '${_formatDate(latestFuel.date)} · '
-                        '${_formatDecimal(latestFuel.liters, 2)} Liter',
-                    value: '${_formatDecimal(latestFuel.totalPrice, 2)} €',
-                    onTap: () {
-                      _openFuel(selectedVehicle);
-                    },
-                  )
-                else
+                if (latestFuel == null && latestExpense == null)
                   const _EmptyEntryCard(
-                    icon: Icons.local_gas_station_outlined,
-                    text: 'Noch kein Tankvorgang gespeichert.',
-                  ),
-
-                const SizedBox(height: 12),
-
-                if (latestExpense != null)
-                  _LatestEntryCard(
-                    icon: Icons.receipt_long_outlined,
-                    title: latestExpense.title,
-                    subtitle:
-                        '${_formatDate(latestExpense.date)} · '
-                        '${latestExpense.category}',
-                    value: '${_formatDecimal(latestExpense.amount, 2)} €',
-                    onTap: () {
-                      _openExpenses(selectedVehicle);
-                    },
+                    icon: Icons.history_rounded,
+                    text: 'Noch keine Aktivitäten für dieses Fahrzeug.',
                   )
-                else
-                  const _EmptyEntryCard(
-                    icon: Icons.receipt_long_outlined,
-                    text: 'Noch keine Ausgabe gespeichert.',
-                  ),
+                else ...[
+                  if (latestFuel != null &&
+                      (latestExpense == null ||
+                          !latestFuel.date.isBefore(latestExpense.date))) ...[
+                    _LatestEntryCard(
+                      icon: Icons.local_gas_station,
+                      title: latestFuel.station ?? 'Tankvorgang',
+                      subtitle:
+                          '${_formatDate(latestFuel.date)} · '
+                          '${_formatDecimal(latestFuel.liters, 2)} Liter',
+                      value: '${_formatDecimal(latestFuel.totalPrice, 2)} €',
+                      onTap: () => _openFuel(selectedVehicle),
+                    ),
+                    if (latestExpense != null) const SizedBox(height: 12),
+                  ],
+                  if (latestExpense != null)
+                    _LatestEntryCard(
+                      icon: Icons.receipt_long_outlined,
+                      title: latestExpense.title,
+                      subtitle:
+                          '${_formatDate(latestExpense.date)} · '
+                          '${latestExpense.category}',
+                      value: '${_formatDecimal(latestExpense.amount, 2)} €',
+                      onTap: () => _openExpenses(selectedVehicle),
+                    ),
+                  if (latestFuel != null &&
+                      latestExpense != null &&
+                      latestFuel.date.isBefore(latestExpense.date)) ...[
+                    const SizedBox(height: 12),
+                    _LatestEntryCard(
+                      icon: Icons.local_gas_station,
+                      title: latestFuel.station ?? 'Tankvorgang',
+                      subtitle:
+                          '${_formatDate(latestFuel.date)} · '
+                          '${_formatDecimal(latestFuel.liters, 2)} Liter',
+                      value: '${_formatDecimal(latestFuel.totalPrice, 2)} €',
+                      onTap: () => _openFuel(selectedVehicle),
+                    ),
+                  ],
+                ],
               ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _DashboardStatusStrip extends StatelessWidget {
+  const _DashboardStatusStrip({
+    required this.upcoming,
+    required this.vehicle,
+    required this.onTap,
+  });
+
+  final List<MaintenanceEntry> upcoming;
+  final Vehicle vehicle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final urgent = upcoming.where((entry) {
+      final type = calculateMaintenanceStatus(
+        entry: entry,
+        vehicle: vehicle,
+      ).type;
+      return type == MaintenanceStatusType.overdue ||
+          type == MaintenanceStatusType.dueSoon;
+    }).length;
+    final isUrgent = urgent > 0;
+    final accent = isUrgent ? colors.error : colors.primary;
+
+    return Material(
+      color: accent.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: accent.withValues(alpha: 0.20)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isUrgent
+                    ? Icons.warning_amber_rounded
+                    : Icons.verified_outlined,
+                color: accent,
+                size: 27,
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isUrgent
+                          ? '$urgent Wartung${urgent == 1 ? '' : 'en'} bald fällig'
+                          : 'Fahrzeugstatus',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      isUrgent
+                          ? 'Wichtige Termine und Intervalle prüfen'
+                          : upcoming.isEmpty
+                          ? 'Keine Wartungserinnerungen eingerichtet'
+                          : '${upcoming.length} Wartungserinnerung${upcoming.length == 1 ? '' : 'en'} hinterlegt',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -836,66 +928,139 @@ class _VehicleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const dark = Color(0xFF111827);
+    const graphite = Color(0xFF263448);
 
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      color: colors.primaryContainer,
+    return Container(
+      margin: const EdgeInsets.only(right: 2),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [graphite, dark],
+        ),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.12),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Stack(
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 23,
-                    backgroundColor: colors.primary,
-                    child: Icon(icon, color: colors.onPrimary, size: 25),
-                  ),
-                  const Spacer(),
-                  if (vehicle.isDefault)
-                    const Chip(
-                      avatar: Icon(Icons.star, size: 15),
-                      label: Text('Standard'),
-                      visualDensity: VisualDensity.compact,
+              Positioned(
+                right: -35,
+                top: -52,
+                child: Icon(
+                  icon,
+                  size: 220,
+                  color: Colors.white.withValues(alpha: 0.055),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(11),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: Icon(icon, color: Colors.white, size: 25),
+                        ),
+                        const Spacer(),
+                        if (vehicle.isDefault)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFFE6B967,
+                              ).withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.star_rounded,
+                                  size: 15,
+                                  color: Color(0xFFE6B967),
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'STANDARD',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    letterSpacing: 0.8,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFFE6B967),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
-                ],
-              ),
-              const SizedBox(height: 13),
-              Text(
-                vehicle.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '${vehicle.brand} ${vehicle.model}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              const Spacer(),
-              Row(
-                children: [
-                  const Icon(Icons.speed, size: 18),
-                  const SizedBox(width: 7),
-                  Text(
-                    '$mileage km',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const Spacer(),
-                  const Icon(Icons.chevron_right, size: 21),
-                ],
+                    const Spacer(),
+                    Text(
+                      vehicle.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${vehicle.brand} ${vehicle.model}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Color(0xFFC5CEDB)),
+                    ),
+                    const SizedBox(height: 17),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.speed_rounded,
+                          size: 18,
+                          color: Color(0xFFE6B967),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '$mileage km',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const Spacer(),
+                        const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Colors.white70,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -933,7 +1098,7 @@ class _QuickActionCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: SizedBox(
-            height: 92,
+            height: 79,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1018,7 +1183,7 @@ class _StatCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(data.icon, color: colors.primary),
-            const SizedBox(height: 18),
+            const SizedBox(height: 12),
             Text(
               data.value,
               maxLines: 1,
