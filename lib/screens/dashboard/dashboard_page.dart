@@ -584,16 +584,56 @@ class _DashboardStatusStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final urgent = upcoming.where((entry) {
-      final type = calculateMaintenanceStatus(
+    var overdueCount = 0;
+    var dueSoonCount = 0;
+
+    for (final entry in upcoming) {
+      final status = calculateMaintenanceStatus(
         entry: entry,
         vehicle: vehicle,
       ).type;
-      return type == MaintenanceStatusType.overdue ||
-          type == MaintenanceStatusType.dueSoon;
-    }).length;
-    final isUrgent = urgent > 0;
-    final accent = isUrgent ? colors.error : colors.primary;
+      if (status == MaintenanceStatusType.overdue) {
+        overdueCount++;
+      } else if (status == MaintenanceStatusType.dueSoon) {
+        dueSoonCount++;
+      }
+    }
+
+    final hasOverdue = overdueCount > 0;
+    final hasDueSoon = dueSoonCount > 0;
+    final hasReminders = upcoming.isNotEmpty;
+
+    final Color accent;
+    final IconData statusIcon;
+    final String title;
+    final String subtitle;
+
+    if (hasOverdue) {
+      accent = colors.error;
+      statusIcon = Icons.error_outline_rounded;
+      title =
+          '$overdueCount Wartung${overdueCount == 1 ? '' : 'en'} überfällig';
+      subtitle = hasDueSoon
+          ? 'Zusätzlich $dueSoonCount bald fällig'
+          : 'Jetzt Wartungstermine prüfen';
+    } else if (hasDueSoon) {
+      accent = const Color(0xFFE6A23C);
+      statusIcon = Icons.warning_amber_rounded;
+      title =
+          '$dueSoonCount Wartung${dueSoonCount == 1 ? '' : 'en'} bald fällig';
+      subtitle = 'Anstehende Wartungstermine prüfen';
+    } else if (hasReminders) {
+      accent = const Color(0xFF36A57A);
+      statusIcon = Icons.verified_outlined;
+      title = 'Alles in Ordnung';
+      subtitle =
+          '${upcoming.length} Wartungserinnerung${upcoming.length == 1 ? '' : 'en'} hinterlegt';
+    } else {
+      accent = colors.primary;
+      statusIcon = Icons.notifications_none_rounded;
+      title = 'Keine Erinnerungen eingerichtet';
+      subtitle = 'Wartungsintervalle für dein Fahrzeug hinterlegen';
+    }
 
     return Material(
       color: accent.withValues(alpha: 0.08),
@@ -605,35 +645,23 @@ class _DashboardStatusStrip extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: accent.withValues(alpha: 0.20)),
+            border: Border.all(color: accent.withValues(alpha: 0.25)),
           ),
           child: Row(
             children: [
-              Icon(
-                isUrgent
-                    ? Icons.warning_amber_rounded
-                    : Icons.verified_outlined,
-                color: accent,
-                size: 27,
-              ),
+              Icon(statusIcon, color: accent, size: 27),
               const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isUrgent
-                          ? '$urgent Wartung${urgent == 1 ? '' : 'en'} bald fällig'
-                          : 'Fahrzeugstatus',
+                      title,
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      isUrgent
-                          ? 'Wichtige Termine und Intervalle prüfen'
-                          : upcoming.isEmpty
-                          ? 'Keine Wartungserinnerungen eingerichtet'
-                          : '${upcoming.length} Wartungserinnerung${upcoming.length == 1 ? '' : 'en'} hinterlegt',
+                      subtitle,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],

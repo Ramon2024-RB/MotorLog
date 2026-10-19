@@ -39,6 +39,8 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
   final Set<String> _selectedWorkTypes = <String>{};
   final List<String> _customWorkNames = <String>[];
   bool _worksLoaded = false;
+  final Map<String, _WorkInterval> _workIntervals = {};
+
   late DateTime _selectedDate;
   DateTime? _nextDate;
 
@@ -144,6 +146,16 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
         _selectedWorkTypes.add(_legacyCategoryToWorkType(entry.category));
       }
 
+      _workIntervals.clear();
+      for (final work in works) {
+        final key = work.type == 'custom'
+            ? 'custom:${work.customName?.trim() ?? ''}'
+            : 'type:${work.type}';
+        _workIntervals[key] = _WorkInterval(
+          nextMileage: work.nextMileage,
+          nextDate: work.nextDate,
+        );
+      }
       _worksLoaded = true;
     });
   }
@@ -228,6 +240,148 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
     }
   }
 
+  String _workKey(String type, {String? customName}) =>
+      type == 'custom' ? 'custom:${customName?.trim() ?? ''}' : 'type:$type';
+
+  Future<void> _editWorkInterval(String key, String title) async {
+    final current = _workIntervals[key] ?? const _WorkInterval();
+    final mileageController = TextEditingController(
+      text: current.nextMileage?.toString() ?? '',
+    );
+    DateTime? date = current.nextDate;
+    String? validationMessage;
+
+    final result = await showDialog<_WorkInterval>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Nächste Fälligkeit für diese Arbeit (optional).'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: mileageController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Nächster Kilometerstand',
+                    suffixText: 'km',
+                    errorText: validationMessage,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final today = DateUtils.dateOnly(DateTime.now());
+                    final picked = await showDatePicker(
+                      context: dialogContext,
+                      initialDate:
+                          date ??
+                          DateTime(today.year + 1, today.month, today.day),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(today.year + 20, 12, 31),
+                    );
+                    if (picked != null) {
+                      setDialogState(() => date = picked);
+                    }
+                  },
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text(
+                    date == null ? 'Datum auswählen' : _formatDate(date!),
+                  ),
+                ),
+                if (date != null)
+                  TextButton(
+                    onPressed: () => setDialogState(() => date = null),
+                    child: const Text('Datum entfernen'),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final text = mileageController.text.trim();
+                final parsed = text.isEmpty ? null : int.tryParse(text);
+                if (text.isNotEmpty && (parsed == null || parsed < 0)) {
+                  setDialogState(
+                    () => validationMessage = 'Ungültiger Kilometerstand',
+                  );
+                  return;
+                }
+                Navigator.pop(
+                  dialogContext,
+                  _WorkInterval(nextMileage: parsed, nextDate: date),
+                );
+              },
+              child: const Text('Übernehmen'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() => _workIntervals[key] = result);
+  }
+
+  Widget _buildWorkIntervalEditor() {
+    final workItems = <({String key, String label})>[
+      for (final type in _selectedWorkTypes)
+        (key: _workKey(type), label: MaintenanceWorkPicker.nameForType(type)),
+      for (final name in _customWorkNames)
+        (key: _workKey('custom', customName: name), label: name),
+    ];
+    if (workItems.isEmpty) return const SizedBox.shrink();
+
+    return MotorLogSection(
+      title: 'Intervalle je Arbeit',
+      subtitle: 'Optional: Jede Arbeit kann eine eigene Fälligkeit haben.',
+      child: MotorLogCard(
+        margin: EdgeInsets.zero,
+        child: Column(
+          children: [
+            for (var index = 0; index < workItems.length; index++) ...[
+              if (index > 0) const Divider(height: 20),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(workItems[index].label),
+                subtitle: Text(() {
+                  final interval = _workIntervals[workItems[index].key];
+                  if (interval == null ||
+                      (interval.nextMileage == null &&
+                          interval.nextDate == null)) {
+                    return 'Keine eigene Fälligkeit';
+                  }
+                  return [
+                    if (interval.nextMileage != null)
+                      '${interval.nextMileage} km',
+                    if (interval.nextDate != null)
+                      _formatDate(interval.nextDate!),
+                  ].join(' · ');
+                }()),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: _isSaving
+                    ? null
+                    : () => _editWorkInterval(
+                        workItems[index].key,
+                        workItems[index].label,
+                      ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _saveMaintenance() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -309,8 +463,12 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
           id: existing?.id ?? const Uuid().v4(),
           maintenanceEntryId: entry.id,
           type: type,
-          nextMileage: nextMileage,
-          nextDate: _nextDate,
+          nextMileage: _workIntervals.containsKey(_workKey(type))
+              ? _workIntervals[_workKey(type)]!.nextMileage
+              : (existing?.nextMileage ?? nextMileage),
+          nextDate: _workIntervals.containsKey(_workKey(type))
+              ? _workIntervals[_workKey(type)]!.nextDate
+              : (existing?.nextDate ?? _nextDate),
           mileageAdvanceNotified: existing?.mileageAdvanceNotified ?? false,
           mileageDueNotified: existing?.mileageDueNotified ?? false,
         );
@@ -332,8 +490,20 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
           maintenanceEntryId: entry.id,
           type: 'custom',
           customName: customName.trim(),
-          nextMileage: nextMileage,
-          nextDate: _nextDate,
+          nextMileage:
+              _workIntervals.containsKey(
+                _workKey('custom', customName: customName),
+              )
+              ? _workIntervals[_workKey('custom', customName: customName)]!
+                    .nextMileage
+              : (existing?.nextMileage ?? nextMileage),
+          nextDate:
+              _workIntervals.containsKey(
+                _workKey('custom', customName: customName),
+              )
+              ? _workIntervals[_workKey('custom', customName: customName)]!
+                    .nextDate
+              : (existing?.nextDate ?? _nextDate),
           mileageAdvanceNotified: existing?.mileageAdvanceNotified ?? false,
           mileageDueNotified: existing?.mileageDueNotified ?? false,
         );
@@ -588,10 +758,11 @@ class _AddMaintenanceDialogState extends ConsumerState<AddMaintenanceDialog> {
                       ),
                     ),
                   ),
+                  if (_worksLoaded) _buildWorkIntervalEditor(),
                   MotorLogSection(
                     title: 'Erinnerung',
                     subtitle:
-                        'Optional nach Kilometerstand oder Datum erinnern.',
+                        'Gemeinsame Erinnerung für den Wartungseintrag (bisherige Funktion).',
                     child: MotorLogCard(
                       margin: EdgeInsets.zero,
                       child: Column(
@@ -823,4 +994,10 @@ class _VehicleInfoChip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _WorkInterval {
+  const _WorkInterval({this.nextMileage, this.nextDate});
+  final int? nextMileage;
+  final DateTime? nextDate;
 }
